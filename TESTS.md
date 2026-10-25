@@ -25,3 +25,15 @@ Run `spikes/audio_capture_spike.py`. All of the following must hold:
 3. Zero buffer overflows *(checked automatically)*
 4. The played audio stays audible to you throughout, with no virtual cable *(manual)*
 5. Works from a fresh virtual environment using only `pip install`, 3 runs in a row *(manual)*
+
+## Speakers (Step 7) — default scenario from D-010
+Two remote Armenian speakers on separate devices, plus the developer on the mic.
+- [ ] **S1 turn-taking:** A and B alternate for ≥ 10 turns of 3–10 s each. Each person keeps one label (`Speaker 1` or `Speaker 2`) for the whole session.
+- [ ] **S2 return after silence:** A speaks, B speaks, 60 s of silence, then A speaks again. A keeps the original label.
+- [ ] **S3 short turns:** replies under 1.5 s. Record the labelling accuracy separately; this is a known weak case.
+- [ ] **S4 mic isolation:** everything from the microphone is labelled `Me`, and `Me` never appears on system audio.
+- [ ] **S5 no label explosion:** no more than one spurious extra speaker label in 10 minutes.
+
+## Configuration
+- [ ] Every D-010 setting can be overridden from the command line or a config file, and the README documents each one.
+- [ ] Devices can be selected by index and by name substring.

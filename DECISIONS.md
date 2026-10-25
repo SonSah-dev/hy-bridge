@@ -21,6 +21,7 @@ Published model claims are labelled *reported* until they have been reproduced h
   - SeamlessM4T v2: 2.3B parameters, non-commercial licence.
   - Omnilingual ASR: Windows support unverified.
 - **To verify:** CER and real-time factor on our own conversational clips (step 3).
+- **Update 2026-10-25 (D-009):** the BuzzASR experiment is deferred; only run if FastConformer fails Step 3.
 
 ## D-003 Translation candidate (not validated)
 - **Date:** 2026-10-25 · **Status:** proposed
@@ -80,3 +81,46 @@ Published model claims are labelled *reported* until they have been reproduced h
 ## D-008 Language variety
 - **Date:** 2026-10-25 · **Status:** proposed (assumption)
 - **Assumption:** Eastern Armenian is the target variety, because the brief does not specify one. To be revisited if the interview conditions indicate Western Armenian or code-switching.
+
+## D-009 Deadline compressed to 3 days
+- **Date:** 2026-10-25 · **Status:** decided by the developer (exact cut-off time to be confirmed)
+- **Context:** the brief, dated 2026-10-21, allows "one week from receiving this brief". The developer set 3 days remaining as of 2026-10-25, giving a deadline of Wed 2026-10-28.
+- **Decision:** compressed plan (PLAN.md), targeting submission by 28 Oct 18:00.
+  - BuzzASR/OpenVINO is deferred and only tried if FastConformer fails in Step 3.
+  - NLLB 1.3B is only tried if 600M fails.
+  - The converter is built no later than Step 10.
+- **Unchanged:** the ≤ 5 s latency requirement and the brief's deliverables.
+
+## D-010 Test and interview assumptions are configurable
+- **Date:** 2026-10-25 · **Status:** decided (these are assumptions, not requirements; the brief stays the source of truth)
+- **Brief:** at least two people on the call side; the call app and audio setup are not specified.
+- **Default test scenario:** two remote participants on **separate devices**, including stretches where they take turns talking (A, B, A, B …).
+- **Not yet decided:** the call app and headphones vs speakers. No code may depend on either.
+- **Configurable, not hard-coded:**
+
+| Setting | Provisional default | Why it is provisional |
+|---|---|---|
+| Microphone device | Windows default WASAPI input | user may pick by index or name |
+| System-audio device | loopback of the Windows default output | user may pick by index or name |
+| End-of-phrase pause | 600 ms | trades latency against sentence completeness; tuned in Step 8 |
+| Forced segment cut | 8 s | keeps long monologues within 5 s latency |
+| Minimum segment length for speaker assignment | 1.0 s | short segments give unreliable voice embeddings; tuned in Step 7 |
+| Speaker similarity threshold | to be measured (Step 7) | depends on call audio quality |
+| Maximum remote speakers | 4 | safety cap against label explosion; brief requires at least 2 |
+
+- Every default is documented in the README with how to override it.
+
+## D-011 Audio capture is independent of the conferencing app
+- **Date:** 2026-10-25 · **Status:** proposed (design; capture still has to pass the Step 1 spike)
+- **Decision:**
+  - Capture uses only standard Windows audio: a microphone input device, plus the **WASAPI loopback of an output device** (whatever plays through it, from any app).
+  - There is no app-specific code, no virtual cable and no app plugin.
+- **Interface:**
+  - Each source (`mic`, `system`) produces timestamped 16 kHz mono float32 frames.
+  - Everything downstream (VAD, ASR, MT, speakers) sees only that interface.
+  - Devices are selected by index or by name substring; a `--list-devices` command prints them.
+- **Timestamps:** taken from the wall clock at capture, not from frame counts. That way, if loopback delivers no data during silence, timing stays correct (to confirm in Step 1).
+- **User responsibility (README):** the call app must play through the output device being captured. If a headset is used, select that headset's loopback.
+- **Known limits:**
+  - apps using WASAPI exclusive mode are not captured
+  - echo from speakers into the mic is out of scope (brief)
