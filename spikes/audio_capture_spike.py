@@ -34,6 +34,8 @@ from armtranslate.config import load_config, parse_device  # noqa: E402
 
 DURATION_TOLERANCE_S = 0.2
 CLIP_LEVEL = 32767
+ACTIVE_DBFS = -60          # a 1 s window louder than this counts as "signal present"
+MIN_ACTIVE_FRACTION = 0.3  # speech has pauses; but a stream that is mostly silent fails
 
 
 # ----------------------------------------------------------------- analysis (pure, testable)
@@ -55,6 +57,16 @@ def analyse_native(raw: bytes, channels: int) -> dict:
     }
 
 
+def active_fraction(y: np.ndarray, rate: int) -> float:
+    """Share of 1 s windows of the pipeline stream with RMS above ACTIVE_DBFS."""
+    n = len(y) // rate
+    if n == 0:
+        return 0.0
+    w = y[: n * rate].reshape(n, rate)
+    rms = np.sqrt(np.mean(w.astype(np.float64) ** 2, axis=1))
+    return round(float(np.mean(rms > 10 ** (ACTIVE_DBFS / 20))), 3)
+
+
 def checks(name: str, pipeline_s: float, requested_s: float, st: dict, lv: dict) -> dict:
     """Automatic parts of TESTS.md Step 1. Listening checks stay manual."""
     c = {
@@ -63,6 +75,7 @@ def checks(name: str, pipeline_s: float, requested_s: float, st: dict, lv: dict)
         "zero_overflows": st["overflows"] == 0,
         "zero_dropped_chunks": st["dropped_chunks"] == 0,
         "signal_present(rms>-50dBFS)": lv["rms_dbfs"] > -50,
+        f"active_in_>={MIN_ACTIVE_FRACTION:.0%}_of_seconds": lv["active_fraction"] >= MIN_ACTIVE_FRACTION,
         "no_clipping(<0.1%)": lv["clipped_fraction"] < 0.001,
     }
     if name == "mic":  # a microphone streams continuously; gaps there mean lost audio
@@ -150,6 +163,7 @@ def record(args, cfg) -> int:
             y = np.concatenate([f.samples for f in frames[nm]]) if frames[nm] else np.zeros(0, np.float32)
             pipeline_s = len(y) / cfg.audio.sample_rate
             lv = analyse_native(native, s.channels)
+            lv["active_fraction"] = active_fraction(y, cfg.audio.sample_rate)
             write_wav(out / f"{nm}_native.wav", native, s.native_rate, s.channels)
             write_wav(out / f"{nm}_16k.wav", float_to_pcm16(y), cfg.audio.sample_rate, 1)
             c = checks(nm, pipeline_s, args.seconds, st, lv)
@@ -184,7 +198,7 @@ def record(args, cfg) -> int:
                      f"{s['gap_filled_s']} s (leading {s['leading_fill_s']} s + {s['gaps_filled']} gaps), "
                      f"resyncs {s['clock_resyncs']}")
         lines.append(f"   overflows {s['overflows']}, dropped {s['dropped_chunks']}, rms {s['rms_dbfs']} dBFS, "
-                     f"peak {s['peak_dbfs']} dBFS, clipped {s['clipped_fraction']:.4%}, "
+                     f"peak {s['peak_dbfs']} dBFS, active {s['active_fraction']:.0%} of seconds, clipped {s['clipped_fraction']:.4%}, "
                      f"max callback gap {s['max_callback_gap_ms']} ms")
         for check, ok in s["checks"].items():
             lines.append(f"   {'PASS' if ok else 'FAIL'}  {check}")

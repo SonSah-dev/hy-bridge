@@ -21,7 +21,7 @@
 ## Step 1 — audio-capture spike
 Run `spikes/audio_capture_spike.py` with audio **playing** (any app) while you speak. All of the following must hold:
 1. Both 16 kHz pipeline streams are 30 s ± 0.2 s, and native + filled audio adds up to that length *(checked automatically)*
-2. The mic file contains your voice; the loopback file contains the played audio; no clipping or dropouts *(clipping checked automatically; the rest by listening)*
+2. The mic file contains your voice; the loopback file contains the played audio; no clipping or dropouts *(clipping, and signal in ≥ 30% of 1 s windows, checked automatically; the rest by listening)*
 3. Zero buffer overflows, zero dropped chunks, no gaps filled on the mic *(checked automatically)*
 4. The played audio stays audible to you throughout, with no virtual cable *(manual)*
 5. Works from a fresh virtual environment using only `pip install`, 3 runs in a row *(manual)*
