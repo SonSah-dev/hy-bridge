@@ -1,0 +1,34 @@
+# Example settings. Copy to config.toml and pass with --config config.toml.
+# Every value is a provisional default (DECISIONS.md D-010), not a requirement.
+# The challenge brief is the source of truth. Omitted keys keep their defaults;
+# unknown keys are an error. Any key can also be set on the command line:
+#     --set audio.system_device="Headset"   --set speakers.min_segment_s=1.5
+
+[audio]
+# Devices: "default", an index from --list, or part of the device name.
+mic_device = "default"        # Windows default WASAPI input
+system_device = "default"     # loopback of the Windows default output.
+                              # Call apps often play through the *communications* device
+                              # (e.g. a headset). Pick that device's loopback by name if so.
+sample_rate = 16000           # pipeline format (mono float32)
+block_ms = 20                 # capture callback size
+fill_gaps = true              # loopback sends nothing while nothing plays; fill with silence
+gap_threshold_ms = 200        # must exceed normal callback jitter (measured in Step 1)
+queue_seconds = 10.0          # buffered audio per source before chunks are dropped (and counted)
+
+[segmentation]
+end_pause_ms = 600            # end of phrase; lower = faster, higher = more complete sentences
+max_segment_s = 8.0           # forced cut so long monologues stay within the 5 s latency budget
+
+[speakers]
+min_segment_s = 1.0           # shorter system-audio segments do not create/assign a speaker
+# similarity_threshold = 0.6  # unset until measured in Step 7
+max_remote_speakers = 4       # safety cap against label explosion; brief requires >= 2
+
+[scenario]
+# Describes the test setup; written into reports. No code depends on these values.
+remote_participants = 2       # initial test: two remote people...
+separate_devices = true       # ...each on their own device
+turn_taking = true            # includes stretches of A, B, A, B
+call_app = "unspecified"      # not decided yet; capture works with any app
+output_setup = "unspecified"  # "headphones" or "speakers"; not decided yet

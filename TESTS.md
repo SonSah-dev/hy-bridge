@@ -19,12 +19,17 @@
 | Stability | 15-minute session with no crash and no growing delay |
 
 ## Step 1 — audio-capture spike
-Run `spikes/audio_capture_spike.py`. All of the following must hold:
-1. Both recordings are 30 s ± 0.2 s and can be resampled to 16 kHz mono *(checked automatically)*
+Run `spikes/audio_capture_spike.py` with audio **playing** (any app) while you speak. All of the following must hold:
+1. Both 16 kHz pipeline streams are 30 s ± 0.2 s, and native + filled audio adds up to that length *(checked automatically)*
 2. The mic file contains your voice; the loopback file contains the played audio; no clipping or dropouts *(clipping checked automatically; the rest by listening)*
-3. Zero buffer overflows *(checked automatically)*
+3. Zero buffer overflows, zero dropped chunks, no gaps filled on the mic *(checked automatically)*
 4. The played audio stays audible to you throughout, with no virtual cable *(manual)*
 5. Works from a fresh virtual environment using only `pip install`, 3 runs in a row *(manual)*
+6. Selecting devices by name works: `--system "<part of name>"` and `--mic "<part of name>"` *(manual)*
+7. Pause the played audio for ~10 s mid-run: `system` stays 30 s long, with the pause reported as one filled gap *(manual, read report.txt)*
+8. Note `max callback gap` on the mic. If it is near 200 ms, raise `audio.gap_threshold_ms` *(manual)*
+
+Optional, saves time in Step 7: during a test call with the two remote speakers taking turns (S1), run `--seconds 120 --tag s1-turns` and keep `system_16k.wav` as an offline fixture for speaker clustering.
 
 ## Speakers (Step 7) — default scenario from D-010
 Two remote Armenian speakers on separate devices, plus the developer on the mic.
