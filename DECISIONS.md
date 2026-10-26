@@ -124,3 +124,12 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Known limits:**
   - apps using WASAPI exclusive mode are not captured
   - echo from speakers into the mic is out of scope (brief)
+
+### D-011 update 2026-10-25: capture layer implemented (`armtranslate/audio.py`)
+- **Status:** implemented; unit-tested; one real 5 s capture on the developer laptop (mic passes, system stream silent because nothing was playing). Full Step 1 still pending.
+- **Interface:** `AudioSource.read() -> AudioFrame(source, t_start, samples, rate)`; sources are `mic` and `system`. Selection by index, name substring (WASAPI devices only, case-insensitive; ambiguous names are an error) or Windows default.
+- **Resampling:** `soxr.ResampleStream` (streaming, no edge artefacts between chunks), replacing per-file `scipy.resample_poly`. Timestamps take the resampler's delay into account.
+- **Timing (confirmed on this laptop):** WASAPI loopback delivered **zero callbacks** while nothing was playing. Each source therefore keeps a sample clock anchored when the stream starts. When the wall clock runs ahead of it by more than `gap_threshold_ms` (200 ms), the gap is filled with silence, so the system stream stays continuous and in sync with the mic (start skew measured at 1–2 ms). Leading silence and later gaps are counted separately in the stats. A device clock running fast is resynchronised.
+- **Trade-off:** silence on a loopback that has gone quiet reaches downstream up to `gap_threshold_ms` late. Call apps usually keep rendering during a call, so this should be rare. To be checked in Step 6/8.
+- **Device names** come back in the Windows display language (here Russian, as Unicode). They are matched as Unicode; console output uses `errors="replace"`.
+- **Step 1 runs 2026-10-26 (laptop speakers, Realtek loopback):** both loopback behaviours were seen. (a) When playback stopped, the loopback sent no callbacks; this was filled as one gap (18.1 s) and the stream stayed 29.85 s. (b) In the pause test the player kept its stream open: callbacks continued, with near-silent audio (about −80 dBFS) for about 10 s, so there was no gap and nothing needed filling. Both keep the system stream continuous. The mic noise suppressor (Intel Smart Sound) brings non-speech down to about −97 dBFS.
