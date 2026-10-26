@@ -1,7 +1,7 @@
 # Tests and success criteria
 
 ## Mandatory (from the brief)
-- [ ] Microphone and system audio are captured at the same time; the user chooses the devices
+- [x] Microphone and system audio are captured at the same time; the user chooses the devices *(Step 1, 2026-10-26)*
 - [ ] Armenian speech is recognised and printed as Armenian text
 - [ ] Each segment is translated into understandable English
 - [ ] Microphone speech is always labelled `Me`; remote speakers get stable `Speaker 1`, `Speaker 2`, … labels for the whole session
@@ -26,8 +26,20 @@ Run `spikes/audio_capture_spike.py` with audio **playing** (any app) while you s
 4. The played audio stays audible to you throughout, with no virtual cable *(manual)*
 5. Works from a fresh virtual environment using only `pip install`, 3 runs in a row *(manual)*
 6. Selecting devices by name works: `--system "<part of name>"` and `--mic "<part of name>"` *(manual)*
-7. Pause the played audio for ~10 s mid-run: `system` stays 30 s long, with the pause reported as one filled gap *(manual, read report.txt)*
+7. Pause the played audio for ~10 s mid-run: `system` stays 30 s long; if the loopback stops sending data, the pause is reported as one filled gap *(manual, read report.txt)*
 8. Note `max callback gap` on the mic. If it is near 200 ms, raise `audio.gap_threshold_ms` *(manual)*
+
+**Result: PASSED 2026-10-26** on the developer laptop (Intel Smart Sound mic array, Realtek speakers loopback, both 48 kHz stereo).
+| # | Evidence |
+|---|---|
+| 1, 3 | Runs `item5-a/b/c`: pipeline 29.97–30.00 s, 0 overflows, 0 dropped chunks, 0 mic gaps |
+| 2 | Signal in 40–76% (mic) and 97–100% (system) of seconds; developer listened: voice and played audio clear, no dropouts |
+| 4 | Developer confirmed playback stayed audible; no virtual cable |
+| 5 | Fresh `spikes\.venv`, Python 3.12.10, `pip install -r requirements-spike.txt` only; 3 runs in a row all pass; 34 unit tests pass on 3.12 |
+| 6 | `--mic Intel --system Realtek` selected the same devices as the defaults (works on the Russian device name) |
+| 7 | Stopped playback → one filled gap of 18.1 s, stream 29.85 s (run 1); paused player kept sending near-silence → no gap needed (pause run) |
+| 8 | Max callback gap 22–41 ms across all runs; 200 ms threshold kept |
+| — | Mic/system start skew 0.5–1.9 ms |
 
 Optional, saves time in Step 7: during a test call with the two remote speakers taking turns (S1), run `--seconds 120 --tag s1-turns` and keep `system_16k.wav` as an offline fixture for speaker clustering.
 
