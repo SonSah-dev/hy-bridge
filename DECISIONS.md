@@ -216,7 +216,7 @@ Published model claims are labelled *reported* until they have been reproduced h
   - **D-013 limitation:** our ONNX export contains FastConformer's CTC head. NVIDIA's Transducer head is reported 0.9 WER points better on FLEURS (12.32% vs 13.23%). This accuracy is available only if a Transducer export is made; not pursued.
 
 ## D-015 Translation: NLLB-200 distilled 600M, CTranslate2 int8, beam 2, 4 threads (Step 4)
-- **Date:** 2026-10-27 · **Status:** verified on the 15 mic clips (D-012). The manual rating is provisional until the developer confirms it. The licence choice is still open (D-005).
+- **Date:** 2026-10-27 · **Status:** verified on the 15 mic clips (D-012); manual rating confirmed by the developer; licence accepted (D-005).
 - **Candidates:** both were converted from the official repos with `ct2-transformers-converter` (CTranslate2 4.8.4, MIT) and tokenised with sentencepiece:
   - `facebook/nllb-200-distilled-600M` (`hye_Armn` → `eng_Latn`), CC-BY-NC-4.0
   - `Helsinki-NLP/opus-mt-hy-en` (Marian), Apache-2.0. **This settles D-003's open question:** an Armenian→English opus-mt model does exist.
@@ -239,7 +239,7 @@ Published model claims are labelled *reported* until they have been reproduced h
   - Beam sizes 1, 2 and 4 are within noise on 15 clips (one timed run per setting), so the fastest setting was chosen.
   - Beam and threads are settings, to be re-tuned in Step 8 when ASR and MT share one worker.
 - **Latency estimate (not yet measured live):** for an 8 s forced segment (D-010): 600 ms end-of-phrase pause + ≈ 0.35 s ASR + ≈ 1 s MT ≈ 2 s, inside the p95 ≤ 4 s target. Step 5 measures it.
-- **Manual rating:** Claude's provisional rating is **11 of 15 understandable (73%)**, against a target of ≥ 70% (TESTS.md). The developer's rating goes in `eval/results/mt-review-nllb-int8-b2-t4.csv`.
+- **Manual rating:** **11 of 15 understandable (73%)**, against a target of ≥ 70% (TESTS.md). Claude rated first; the developer's ratings matched (`eval/results/mt-review-nllb-int8-b2-t4.csv`).
 - **Failure patterns:**
   - **Numbers and times:** 2022 → "1922" (mic-06). `ժամ ին` (ASR's version of `ժամը իննին`) → "1:00" (mic-07).
   - **Rare words and place names:** Վանաձոր → "Vanassar", կավագործ (potter) → "cowboy"/"cattle industry" (mic-01). These fail even from the correct reference, so the cause is NLLB, not ASR.

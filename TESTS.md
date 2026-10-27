@@ -3,7 +3,7 @@
 ## Mandatory (from the brief)
 - [x] Microphone and system audio are captured at the same time; the user chooses the devices *(Step 1, 2026-10-26)*
 - [ ] Armenian speech is recognised and printed as Armenian text
-- [ ] Each segment is translated into understandable English
+- [ ] Each segment is translated into understandable English *(mic clips: 11/15 understandable, Step 4; live check in Step 9)*
 - [ ] Microphone speech is always labelled `Me`; remote speakers get stable `Speaker 1`, `Speaker 2`, … labels for the whole session
 - [ ] Each terminal line shows time, speaker, Armenian and English
 - [ ] **≤ 5 s from the end of a spoken phrase to the English line.** Measured from the last voiced audio frame to the print timestamp, logged for every segment.
@@ -62,7 +62,7 @@ Run `python eval/bench_asr.py` on the Step 2 set. Exit check: CER and real-time 
 ## Step 4 — translation (D-015)
 Run `python eval/bench_mt.py` on the Step 2 set, translating both the `hy` reference and the Step 3 ASR output. Exit check: choice recorded in DECISIONS.md; ≥ 70% of segments rated "understandable" (from ASR output); time per segment leaves room in the 5 s budget.
 
-**Result: PASSED (provisional) 2026-10-27.** NLLB-200 distilled 600M, CTranslate2 int8, beam 2, 4 threads: chrF 60.8 from ASR output (opus-mt-hy-en: 40.4); median 0.73 s, max 1.72 s per segment. Claude's provisional rating: 11 of 15 understandable (73%). **To do (developer):** fill the `understandable` column in `eval/results/mt-review-nllb-int8-b2-t4.csv` and confirm ≥ 70%. Licence: NLLB accepted with README disclosure (D-005, 2026-10-27).
+**Result: PASSED 2026-10-27.** NLLB-200 distilled 600M, CTranslate2 int8, beam 2, 4 threads: chrF 60.8 from ASR output (opus-mt-hy-en: 40.4); median 0.73 s, max 1.72 s per segment. Manual rating: **11 of 15 understandable (73%)**; the developer's ratings matched Claude's provisional ones (`eval/results/mt-review-nllb-int8-b2-t4.csv`). Licence: NLLB accepted with README disclosure (D-005, 2026-10-27).
 
 ## Speakers (Step 7) — default scenario from D-010
 Two remote Armenian speakers on separate devices, plus the developer on the mic.
