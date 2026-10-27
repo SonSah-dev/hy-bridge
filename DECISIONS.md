@@ -31,6 +31,7 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Initial candidate:** NLLB-200 distilled 600M (`hye_Armn` → `eng_Latn`) via CTranslate2 int8 on CPU. Memory use of about 3 GB is *reported* by a converter's notes.
 - **Fallback:** NLLB 1.3B (about 5.5 GB, *reported*), only if quality is insufficient and latency allows.
 - **To verify:** whether a Helsinki `opus-mt` hy→en model exists (only en→hy has been confirmed); speed and quality on our clips (step 4).
+- **Update 2026-10-27 (D-015):** `Helsinki-NLP/opus-mt-hy-en` exists (Apache-2.0) but scores about 20 chrF points below NLLB-600M. NLLB-600M int8 is chosen.
 
 ## D-004 Speaker identification approach (not validated)
 - **Date:** 2026-10-25 · **Status:** proposed
@@ -38,8 +39,8 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Why not pyannote pipelines:** they are gated (accepting terms or a token is required), and their documentation describes no streaming inference.
 - **To verify:** label stability on codec-compressed call audio and short segments (step 7).
 
-## D-005 Licensing — open questions
-- **Date:** 2026-10-25 · **Status:** open
+## D-005 Licensing
+- **Date:** 2026-10-25 · **Status:** decided 2026-10-27 (NLLB accepted with disclosure); remaining items as noted
 - **The brief:** says nothing about licences. It requires local models, Python, and no model weights in the repo.
 - **Known licences:**
   - NLLB-200: CC-BY-NC-4.0 (**non-commercial**)
@@ -48,8 +49,15 @@ Published model claims are labelled *reported* until they have been reproduced h
   - BuzzASR: MIT
   - PyAudioWPatch: MIT
 - **Conflicting information:** WeSpeaker ResNet34 is tagged Apache-2.0 on Hugging Face, but WeSpeaker's documentation says VoxCeleb-trained models follow CC BY 4.0. It is treated conservatively as CC BY 4.0.
-- **Still to verify:** the licence of the OpenVoiceOS ONNX export repo, the `onnx-asr` package licence, and Silero VAD's licence at its source.
+- **Still to verify:** Silero VAD's licence at its source (Step 5).
+- **Verified 2026-10-27:** the OpenVoiceOS ONNX export repo is CC-BY-4.0 (Hugging Face metadata). Package metadata: `onnx-asr` MIT, onnxruntime MIT, CTranslate2 MIT, sentencepiece Apache-2.0, `Helsinki-NLP/opus-mt-hy-en` Apache-2.0.
 - **Pending decision (developer):** accept NLLB's non-commercial licence with disclosure in the README, or require permissively licensed models only.
+- **Update 2026-10-27 (D-015):** the only permissive MT measured (opus-mt-hy-en, Apache-2.0) is about 20 chrF points worse than NLLB.
+- **Decision 2026-10-27 (developer):** accept NLLB-200's CC-BY-NC-4.0 licence and disclose it clearly in the README (section *Licences*). Consequences:
+  - The tool as configured is for **non-commercial use only** (e.g. this challenge, evaluation, personal use).
+  - Commercial use would require replacing the translation model. `opus-mt-hy-en` (Apache-2.0) is the measured permissive fallback and already works with `armtranslate/mt.py` (`family="opus"`), at lower quality (D-015).
+  - No model weights are committed (brief). Users download them from the original repos and accept each licence themselves.
+  - CC-BY-4.0 models (FastConformer; WeSpeaker, treated conservatively) need attribution, which the README gives.
 - Not legal advice.
 
 ## D-006 Chat-history preservation — Step 0 findings
@@ -206,3 +214,38 @@ Published model claims are labelled *reported* until they have been reproduced h
   - **"Whisper zero-shot is weaker on Armenian" (D-002):** this is backed by the BuzzASR card, which reports Whisper-large-v3 at 13.79% CER on FLEURS (BuzzASR 3.72%). It was not measured here.
   - **Omnilingual ASR (D-002):** fairseq2, which it is built on, states it has no native Windows support and lists Python 3.10–3.12 (fairseq2 README). The rejection now has a primary source, not just "unverified".
   - **D-013 limitation:** our ONNX export contains FastConformer's CTC head. NVIDIA's Transducer head is reported 0.9 WER points better on FLEURS (12.32% vs 13.23%). This accuracy is available only if a Transducer export is made; not pursued.
+
+## D-015 Translation: NLLB-200 distilled 600M, CTranslate2 int8, beam 2, 4 threads (Step 4)
+- **Date:** 2026-10-27 · **Status:** verified on the 15 mic clips (D-012); manual rating confirmed by the developer; licence accepted (D-005).
+- **Candidates:** both were converted from the official repos with `ct2-transformers-converter` (CTranslate2 4.8.4, MIT) and tokenised with sentencepiece:
+  - `facebook/nllb-200-distilled-600M` (`hye_Armn` → `eng_Latn`), CC-BY-NC-4.0
+  - `Helsinki-NLP/opus-mt-hy-en` (Marian), Apache-2.0. **This settles D-003's open question:** an Armenian→English opus-mt model does exist.
+- **Method (`eval/bench_mt.py`):** each clip is translated from the `hy` reference and from FastConformer's actual output (`asr-fp32-t2`, D-013); the latter is what the pipeline will see. chrF and BLEU (sacrebleu) are computed against the single short `en` reference, so they are relative, not absolute. Time is the median of 3 runs after a warm-up, translating the ASR text. Results are in `eval/results/mt-*.jsonl`.
+- **Results:**
+
+| Model | Weights | Beam | Threads | chrF from ASR | chrF from reference | BLEU from ASR | Median | Max (mic-07, 18.5 s of speech) |
+|---|---|---|---|---|---|---|---|---|
+| opus-mt-hy-en | int8 | 4 | 2 | 40.4 | 43.0 | 15.0 | 0.16 s | 0.50 s |
+| opus-mt-hy-en | fp32 | 4 | 2 | 39.3 | 42.1 | 13.8 | 0.43 s | 1.24 s |
+| NLLB-600M | fp32 | 4 | 2 | 60.1 | 63.0 | 32.3 | 4.10 s | 9.44 s |
+| NLLB-600M | int8 | 4 | 2 | 60.6 | 63.5 | 32.0 | 1.10 s | 2.42 s |
+| NLLB-600M | int8 | 1 | 2 | 57.7 | 62.2 | 30.2 | 0.76 s | 2.07 s |
+| NLLB-600M | int8 | 4 | 4 | 60.6 | 63.5 | 32.0 | 0.87 s | 2.50 s |
+| **NLLB-600M** | **int8** | **2** | **4** | **60.8** | 60.8 | **33.8** | **0.73 s** | **1.72 s** |
+
+- **Decision:** NLLB-600M, int8, beam 2, 4 threads.
+  - opus-mt is about 20 chrF points worse and often loses the meaning (mic-10: "we've finished about seven-year-olds"; mic-15: "develop plastic models").
+  - int8 matches fp32 and is about 4× faster.
+  - Beam sizes 1, 2 and 4 are within noise on 15 clips (one timed run per setting), so the fastest setting was chosen.
+  - Beam and threads are settings, to be re-tuned in Step 8 when ASR and MT share one worker.
+- **Latency estimate (not yet measured live):** for an 8 s forced segment (D-010): 600 ms end-of-phrase pause + ≈ 0.35 s ASR + ≈ 1 s MT ≈ 2 s, inside the p95 ≤ 4 s target. Step 5 measures it.
+- **Manual rating:** **11 of 15 understandable (73%)**, against a target of ≥ 70% (TESTS.md). Claude rated first; the developer's ratings matched (`eval/results/mt-review-nllb-int8-b2-t4.csv`).
+- **Failure patterns:**
+  - **Numbers and times:** 2022 → "1922" (mic-06). `ժամ ին` (ASR's version of `ժամը իննին`) → "1:00" (mic-07).
+  - **Rare words and place names:** Վանաձոր → "Vanassar", կավագործ (potter) → "cowboy"/"cattle industry" (mic-01). These fail even from the correct reference, so the cause is NLLB, not ASR.
+  - **English terms written in Armenian letters by the ASR:** `փրադաքշ` (production) → "drill"/"PR"; `վերժեն քընթրոլ` (version control) → "neutral genes". From the Latin-letter reference they translate correctly, so this is an ASR→MT interaction.
+  - **ASR ending errors change the person:** `շարունակել է` (ASR, for `եմ`) → "He continued" (mic-06).
+  - **Minor:** "Thank you. Thank you." repeated (mic-04); Anna → "Hannah".
+- **Open:**
+  - **D-005 (decided 2026-10-27):** NLLB accepted with a README disclosure; opus-mt stays the permissive fallback. NLLB 1.3B (also CC-BY-NC) stays deferred: 600M meets the target.
+  - **Call audio:** not measured yet (Step 7).

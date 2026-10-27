@@ -51,3 +51,29 @@ python eval/bench_asr.py --quant fp32 --threads 2      # CER and speed on the ev
 ```
 
 On the eval set: 8.2% CER overall, 2.9% on clips without English terms; 0.04× real time (an 18.5 s clip in 0.7 s). English terms come out in Armenian letters (`Python` → `փայթեն`).
+
+## Translation (Step 4)
+
+Armenian → English uses NLLB-200 distilled 600M (**CC-BY-NC-4.0, non-commercial**) through CTranslate2 int8 on the CPU, beam 2, 4 threads (DECISIONS.md D-015). The permissive alternative `Helsinki-NLP/opus-mt-hy-en` (Apache-2.0) was measured and is clearly weaker. Models are converted once from the official repos into `models/`. Conversion needs `torch` and `transformers`; running the models does not. The commands are in [eval/bench_mt.py](eval/bench_mt.py).
+
+```powershell
+python eval/bench_mt.py --family nllb --compute int8 --beam 2 --threads 4
+```
+
+On the eval set, translating the ASR output: chrF 60.8 against our references; 0.73 s median per segment. Known weak spots: years and clock times, rare names, and English terms that the ASR wrote in Armenian letters.
+
+## Licences
+
+> **Non-commercial use only, as configured.** The translation model, NLLB-200 distilled 600M, is licensed **CC-BY-NC-4.0**, which forbids commercial use. This was a deliberate choice: it is clearly more accurate than the only permissively licensed alternative we measured (DECISIONS.md D-005, D-015). For commercial use, swap it for `Helsinki-NLP/opus-mt-hy-en` (Apache-2.0, `family="opus"` in `armtranslate/mt.py`), at lower translation quality.
+
+No model weights are included in this repository. Each model is downloaded from its original source, and by downloading it you accept its licence.
+
+| Component | Used for | Licence |
+|---|---|---|
+| [facebook/nllb-200-distilled-600M](https://huggingface.co/facebook/nllb-200-distilled-600M) | translation | CC-BY-NC-4.0 (**non-commercial**) |
+| [nvidia/stt_hy_fastconformer_hybrid_large_pc](https://huggingface.co/nvidia/stt_hy_fastconformer_hybrid_large_pc), via the ONNX export [OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx](https://huggingface.co/OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx) | speech recognition | CC-BY-4.0 (attribution below) |
+| [Helsinki-NLP/opus-mt-hy-en](https://huggingface.co/Helsinki-NLP/opus-mt-hy-en) | measured alternative, not the default | Apache-2.0 |
+| onnx-asr, onnxruntime, CTranslate2, PyAudioWPatch | runtime | MIT |
+| sentencepiece | tokenisation | Apache-2.0 |
+
+**Attribution:** Armenian speech recognition uses *stt_hy_fastconformer_hybrid_large_pc* by NVIDIA, licensed CC-BY-4.0, converted to ONNX by OpenVoiceOS. Only the runtime format was changed, not the weights. Licences of components added in later steps (voice activity detection, speaker embeddings) are listed here as they are added. This is not legal advice.
