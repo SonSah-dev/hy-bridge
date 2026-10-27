@@ -1,3 +1,4 @@
 PyAudioWPatch==0.2.12.8
 numpy>=1.26
 soxr>=0.3.7
+onnx-asr[cpu,hub]>=0.12

@@ -54,6 +54,11 @@ Record with `python eval/record_clip.py --prompt pNN` (prompts in `eval/prompts.
 - **Conventions in `hy`:** numbers and years as digits; clock times in words; English names and terms (Amazon, AI/ML, production, Python, Git, version control) in Latin letters. Step 3 scoring should normalise case, and may need to treat digits and spelled-out numbers as equal.
 - **Manual checks:** the developer confirmed the texts match the recordings, and that names and details are invented or fine to commit.
 
+## Step 3 — ASR baseline (D-013)
+Run `python eval/bench_asr.py` on the Step 2 set. Exit check: CER and real-time factor recorded in DECISIONS.md; CER ≤ 20% and RTF well under 1 on the CPU.
+
+**Result: PASSED 2026-10-27.** FastConformer ONNX, fp32, 2 threads: **CER 8.2%** (2.9% on the 10 clips without English terms), WER 18.9%, **RTF 0.042**; slowest clip 0.71 s for 18.5 s of audio. int8 was worse on both counts. Main error source: English terms written in Armenian letters. Mic clips only; call audio is measured in Step 7.
+
 ## Speakers (Step 7) — default scenario from D-010
 Two remote Armenian speakers on separate devices, plus the developer on the mic.
 - [ ] **S1 turn-taking:** A and B alternate for ≥ 10 turns of 3–10 s each. Each person keeps one label (`Speaker 1` or `Speaker 2`) for the whole session.

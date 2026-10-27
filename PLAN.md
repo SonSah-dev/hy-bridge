@@ -9,7 +9,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 | Sun 25 | 0 | Verify the chat export; set up repo, docs, GitHub remote | — | D-006, D-007 | done |
 | Sun 25 | 1 | Windows audio-capture spike (mic + WASAPI loopback) | 1.0 | TESTS.md §Step 1 | done 2026-10-26 (TESTS.md §Step 1 result) |
 | Mon 26 | 2 | Eval set: ~15 own clips with reference text (D-012) | 0.75 | TESTS.md §Step 2 | done 2026-10-27 (TESTS.md §Step 2 result) |
-| Mon 26 | 3 | ASR: FastConformer ONNX — CER + real-time factor on CPU | 1.5 | Results in DECISIONS.md | — |
+| Mon 26 | 3 | ASR: FastConformer ONNX — CER + real-time factor on CPU | 1.5 | Results in DECISIONS.md | done 2026-10-27 (D-013) |
 | Mon 26 | 4 | Translation: NLLB-600M — quality + speed on CPU | 0.75 | Choice recorded | — |
 | Mon 26 | 5 | Walking skeleton, mic path: capture → VAD → ASR → MT → terminal, latency logged | 2.0 | Live `Me` lines; latency logged per segment | — |
 | Tue 27 | 6 | Add loopback source, single inference worker, configuration (D-010/D-011) | 1.5 | Both sources print; settings come from config | — |
@@ -21,7 +21,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 **Total ≈ 13.5 h + buffer** on Wed afternoon.
 
 **Cut or deferred because of the deadline (D-009):**
-- BuzzASR/OpenVINO experiment: only if Step 3 shows FastConformer is unusable.
+- ~~BuzzASR/OpenVINO experiment~~: run anyway on 2026-10-27 and rejected; less accurate and too slow (D-014).
 - NLLB 1.3B: only if 600M's quality fails and latency allows.
 - Chat converter: built during Step 10 at the latest.
 

@@ -11,9 +11,9 @@ Setup, model rationale, architecture and limitations will be documented here as 
 Capture uses only standard Windows audio (DECISIONS.md D-011): a WASAPI **microphone** (labelled `Me`) and the WASAPI **loopback of an output device** (`system`: whatever any app plays there). Nothing depends on a particular call app, headset or virtual cable.
 
 ```powershell
-python spikesudio_capture_spike.py --list                         # devices, with indices
-python spikesudio_capture_spike.py --mic 9 --system "Headset"     # index or part of the name
-python spikesudio_capture_spike.py --config config.toml --set speakers.min_segment_s=1.5
+python spikes/audio_capture_spike.py --list                         # devices, with indices
+python spikes/audio_capture_spike.py --mic 9 --system "Headset"     # index or part of the name
+python spikes/audio_capture_spike.py --config config.toml --set speakers.min_segment_s=1.5
 ```
 
 **Make sure the call app plays through the device you capture.** Many call apps use the Windows *communications* device (often a headset), not the default output. If so, select that device's loopback by name. Devices are resolved once at start; changing the Windows default mid-session is not followed.
@@ -39,3 +39,15 @@ python eval/record_clip.py --prompt p04    # Enter to start, Enter to stop; sile
 python eval/check_manifest.py --draft      # progress while texts are missing
 python eval/check_manifest.py              # Step 2 exit check
 ```
+
+## Speech recognition (Step 3)
+
+Armenian ASR uses NVIDIA's FastConformer (CC-BY-4.0) through its ONNX export [`OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx`](https://huggingface.co/OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx) and `onnx-asr` (MIT) on the CPU, fp32, 2 threads (DECISIONS.md D-013). The model (≈ 460 MB) is downloaded once into `models/`, which is git-ignored.
+
+```powershell
+pip install -r requirements.txt
+python eval/bench_asr.py --download                    # fetch the model
+python eval/bench_asr.py --quant fp32 --threads 2      # CER and speed on the eval set
+```
+
+On the eval set: 8.2% CER overall, 2.9% on clips without English terms; 0.04× real time (an 18.5 s clip in 0.7 s). English terms come out in Armenian letters (`Python` → `փայթեն`).
