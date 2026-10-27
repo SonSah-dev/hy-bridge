@@ -220,12 +220,15 @@ def capture_devices(p) -> tuple[list[dict], int, int | None, int | None]:
             mic if mic is not None and mic >= 0 else None, default_loop)
 
 
-def select_devices(p, cfg: AudioConfig) -> dict[str, dict]:
+def select_device(p, cfg: AudioConfig, kind: str) -> dict:
     devices, host, default_mic, default_loop = capture_devices(p)
-    return {
-        "mic": resolve_device(devices, cfg.mic_device, "mic", default_mic, host),
-        "system": resolve_device(devices, cfg.system_device, "system", default_loop, host),
-    }
+    if kind == "mic":
+        return resolve_device(devices, cfg.mic_device, "mic", default_mic, host)
+    return resolve_device(devices, cfg.system_device, "system", default_loop, host)
+
+
+def select_devices(p, cfg: AudioConfig) -> dict[str, dict]:
+    return {kind: select_device(p, cfg, kind) for kind in SOURCES}
 
 
 def device_table(p) -> str:

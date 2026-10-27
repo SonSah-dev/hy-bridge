@@ -133,3 +133,19 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Trade-off:** silence on a loopback that has gone quiet reaches downstream up to `gap_threshold_ms` late. Call apps usually keep rendering during a call, so this should be rare. To be checked in Step 6/8.
 - **Device names** come back in the Windows display language (here Russian, as Unicode). They are matched as Unicode; console output uses `errors="replace"`.
 - **Step 1 runs 2026-10-26 (laptop speakers, Realtek loopback):** both loopback behaviours were seen. (a) When playback stopped, the loopback sent no callbacks; this was filled as one gap (18.1 s) and the stream stayed 29.85 s. (b) In the pause test the player kept its stream open: callbacks continued, with near-silent audio (about −80 dBFS) for about 10 s, so there was no gap and nothing needed filling. Both keep the system stream continuous. The mic noise suppressor (Intel Smart Sound) brings non-speech down to about −97 dBFS.
+
+## D-012 Evaluation set for Steps 3–4 (Step 2)
+- **Date:** 2026-10-26 · **Status:** decided by the developer (format and targets are provisional)
+- **Sources:** about 15 **mic** clips of the developer now. **Call** clips (system audio, the two remote speakers) are added during Step 7 as `call-NN`.
+- **Consequence:** the first Step 3 error rate reflects laptop-mic audio only. Call-compressed speech is measured in Step 7.
+- **Content:** natural, interview-style Eastern Armenian (D-008): questions, answers, opinions, with some names, numbers and dates. It is spoken freely in answer to prompts (`eval/prompts.md`), not read aloud.
+- **References per clip:**
+  - Armenian transcript in Armenian script, exactly as spoken, typed by the developer.
+  - A short, natural English translation, so Step 4 ratings are consistent.
+- **Length targets:** about 10 clips of 2–8 s, 2–3 of about 9–12 s, 2–3 under 1.5 s (short replies; also Step 7's S3 case).
+- **Format:**
+  - Clips are recorded through the capture layer (D-011), trimmed of leading/trailing silence, and saved as 16 kHz mono 16-bit WAV in `eval/audio/` (git-ignored).
+  - `eval/manifest.jsonl` has one JSON object per clip. It is text only and **committed**; content is kept free of private details.
+- **Tools:**
+  - `eval/record_clip.py` records one clip and adds its manifest row.
+  - `eval/check_manifest.py` validates the set; it is Step 2's exit check.

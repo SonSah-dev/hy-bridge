@@ -43,6 +43,13 @@ Run `spikes/audio_capture_spike.py` with audio **playing** (any app) while you s
 
 Optional, saves time in Step 7: during a test call with the two remote speakers taking turns (S1), run `--seconds 120 --tag s1-turns` and keep `system_16k.wav` as an offline fixture for speaker clustering.
 
+## Step 2 — evaluation set (D-012)
+Record with `python eval/record_clip.py --prompt pNN` (prompts in `eval/prompts.md`), then fill `hy` and `en` in `eval/manifest.jsonl`.
+1. `python eval/check_manifest.py` prints **PASS**: every clip has a 16 kHz mono WAV whose length matches the manifest, an Armenian `hy` and an English `en` reference, valid ids and sources *(automatic)*
+2. Length targets met (≥ 15 clips, ≥ 2 under 1.5 s, ≥ 2 of 9 s or more): no length warnings *(automatic)*
+3. Each `hy` is exactly what was said, including hesitations you want the ASR to output; each `en` is a natural translation *(manual)*
+4. The manifest contains no private details; `eval/audio/` stays out of git *(manual; `git status` shows no .wav)*
+
 ## Speakers (Step 7) — default scenario from D-010
 Two remote Armenian speakers on separate devices, plus the developer on the mic.
 - [ ] **S1 turn-taking:** A and B alternate for ≥ 10 turns of 3–10 s each. Each person keeps one label (`Speaker 1` or `Speaker 2`) for the whole session.
