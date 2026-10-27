@@ -21,7 +21,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 **Total ≈ 13.5 h + buffer** on Wed afternoon.
 
 **Cut or deferred because of the deadline (D-009):**
-- BuzzASR/OpenVINO experiment: only if Step 3 shows FastConformer is unusable.
+- ~~BuzzASR/OpenVINO experiment~~: run anyway on 2026-10-27 and rejected; less accurate and too slow (D-014).
 - NLLB 1.3B: only if 600M's quality fails and latency allows.
 - Chat converter: built during Step 10 at the latest.
 

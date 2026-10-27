@@ -11,6 +11,7 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Context:** Windows laptop with an Intel Core Ultra 5 125H, 24 GB RAM and integrated Intel graphics. There is no CUDA and no dedicated GPU memory.
 - **Decision:** every component must meet the 5 s latency requirement on the **CPU**. OpenVINO on the integrated GPU or NPU is only a time-boxed experiment.
 - **Consequence:** Whisper-large-class models are not expected to keep up with real time on this CPU. Published CPU benchmarks report a real-time factor above 1 (*reported*, measured on other hardware).
+- **Update 2026-10-27 (D-014):** measured. A Whisper-large-v3 fine-tune ran at RTF 2.64 on this CPU (torch fp32), and at 0.43 on the integrated GPU (OpenVINO fp16).
 
 ## D-002 ASR candidates (not validated)
 - **Date:** 2026-10-25 · **Status:** proposed
@@ -23,6 +24,7 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **To verify:** CER and real-time factor on our own conversational clips (step 3).
 - **Update 2026-10-25 (D-009):** the BuzzASR experiment is deferred; only run if FastConformer fails Step 3.
 - **Update 2026-10-27 (D-013):** FastConformer passed Step 3 (8.2% CER, RTF 0.04 on CPU); it is the ASR. BuzzASR is not needed.
+- **Update 2026-10-27 (D-014):** BuzzASR measured on our clips: 12.3% CER, RTF 2.64 on CPU and 0.43 on the integrated GPU. Rejected. Size corrected to ≈ 1.55B parameters.
 
 ## D-003 Translation candidate (not validated)
 - **Date:** 2026-10-25 · **Status:** proposed
@@ -170,3 +172,37 @@ Published model claims are labelled *reported* until they have been reproduced h
   - Short endings dropped or changed: the article `ը` (`հարցը` → `հարց`), `ք` (`կկրկնեք` → `կկրկնե`), `եմ` → `է`, `ժամը իննին` → `ժամ ին`.
   - The model card says there is no int8 variant, but the repo now ships `model.int8.onnx`; it runs on CPU.
 - **Not yet known:** accuracy on call-compressed audio and on VAD-cut segments rather than hand-trimmed clips (Steps 5 and 7). BuzzASR stays deferred (D-009): FastConformer passed.
+
+## D-014 BuzzASR measured: rejected (Step 3 follow-up)
+- **Date:** 2026-10-27 · **Status:** verified on the 15 mic clips (D-012). Replaces the deferral in D-002/D-009 with a measurement.
+- **Why measured:** D-002 and D-009 deferred BuzzASR because of time, not evidence. Its card reports 11.89% WER on FLEURS against 13.23% for FastConformer's CTC head (NVIDIA card), so it might have been the more accurate model.
+- **Setup:** `BuzzASR/armenian` (full fine-tune of Whisper-large-v3, MIT). Generation as on the card: greedy, `no_repeat_ngram_size=3`, `repetition_penalty=1.2`. Same clips, scoring and output format as D-013, via `eval/bench_buzzasr.py`. It needs torch/transformers/optimum-intel, so it ran in a separate Python 3.12 venv (torch 2.14.1+cpu, transformers 4.57.6, OpenVINO 2026.4.1, optimum-intel 1.27.0); these are not project dependencies. One timed run per clip after a warm-up. Results are in `eval/results/asr-buzzasr-*.jsonl`.
+- **Results (whole clips, Intel Core Ultra 5 125H):**
+
+| Model / device | CER | WER | CER, 10 clips without English terms | RTF | Per clip |
+|---|---|---|---|---|---|
+| **FastConformer ONNX, CPU, 2 threads (D-013)** | **8.2%** | **18.9%** | **2.9%** | **0.042** | **0.03–0.71 s** |
+| BuzzASR, torch fp32, CPU (14 threads) | 12.3% | 25.2% | 8.3% | 2.64 | 14.3–30.1 s |
+| BuzzASR, OpenVINO fp16, integrated GPU | 12.9% | 24.8% | 9.4% | 0.43 | 2.2–4.4 s (first clip 9.9 s) |
+
+- **Decision: rejected.** On our audio, BuzzASR is less accurate than FastConformer on every measure. It is also too slow:
+  - **CPU:** 14–30 s per clip, against a 5 s budget for the whole pipeline.
+  - **Integrated GPU:** 2.2–4.4 s per clip, even for a 1.5 s reply, because Whisper always pads input to 30 s. ASR alone would use most of the 5 s budget (target p95 ≤ 4 s) before the 600 ms end-of-phrase pause, translation and speaker labelling. The GPU number covers only the 15 clips, with no live load.
+- **Error types (different from FastConformer's):** BuzzASR substitutes real but wrong words, which change the meaning. FastConformer mostly drops or changes word endings. Examples:
+  - mic-10: `հասցրել … պրոյեկտ` ("completed … projects") → `թաքցրել … պատկեր` ("hid … pictures")
+  - mic-07: `վերանայում` ("review") → `վայելում` ("enjoy")
+  - mic-01: `Անահիտ Ադամյան … Վանաձոր … կավագործությամբ` → `անհատ Բադամյան … Վանոցոր … բալագործությամբ`
+  
+  English terms are written in Armenian letters, as with FastConformer (`AI/ML` → `էյ այ էմ էլ`).
+- **Why the FLEURS ranking reversed:** BuzzASR was fine-tuned only on FLEURS and Common Voice. Both are read speech, and their test splits are what its card reports. Our clips are spontaneous laptop-mic speech. FastConformer's training also includes about 235 h of other corpora (NVIDIA card). This is a plausible explanation, not a tested one.
+- **Caveats:**
+  - The GPU result is fp16, and on mic-01 it differs from the CPU fp32 output (CER 23.5% vs 11.1%).
+  - The first GPU clip took 9.9 s after its warm-up. This is unexplained, probably kernel compilation for new shapes.
+  - The OpenVINO export takes about 4 minutes and 5.8 GB of disk.
+  - The NPU was not tried.
+- **Corrections to earlier statements (2026-10-27):**
+  - **BuzzASR size:** a summary of its model card gave about 2B parameters. Its `model.safetensors` is 3.09 GB in float16, so it has **≈ 1.55B** parameters (the Whisper-large-v3 size), about 13 times FastConformer's 115M.
+  - **"Whisper-large-class models are not expected to keep up with real time on this CPU" (D-001):** this rested on third-party benchmarks from other hardware. It is now **measured** for a Whisper-large-v3 model in torch fp32: RTF 2.64. faster-whisper/CTranslate2 int8 was not tried.
+  - **"Whisper zero-shot is weaker on Armenian" (D-002):** this is backed by the BuzzASR card, which reports Whisper-large-v3 at 13.79% CER on FLEURS (BuzzASR 3.72%). It was not measured here.
+  - **Omnilingual ASR (D-002):** fairseq2, which it is built on, states it has no native Windows support and lists Python 3.10–3.12 (fairseq2 README). The rejection now has a primary source, not just "unverified".
+  - **D-013 limitation:** our ONNX export contains FastConformer's CTC head. NVIDIA's Transducer head is reported 0.9 WER points better on FLEURS (12.32% vs 13.23%). This accuracy is available only if a Transducer export is made; not pursued.
