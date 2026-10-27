@@ -29,3 +29,13 @@ All settings and test assumptions are listed, with their defaults, in [config.ex
 | scenario | `remote_participants`, `separate_devices`, `turn_taking`, `call_app`, `output_setup` | 2, true, true, unspecified, unspecified | describes the test; recorded in reports only |
 
 Unit tests (no audio hardware needed): `pip install -r requirements-dev.txt; python -m pytest tests`.
+
+## Evaluation set
+
+About 15 interview-style Armenian clips with Armenian and English references (DECISIONS.md D-012). Audio stays local in `eval/audio/`; the text-only manifest `eval/manifest.jsonl` is committed.
+
+```powershell
+python eval/record_clip.py --prompt p04    # Enter to start, Enter to stop; silence trimmed
+python eval/check_manifest.py --draft      # progress while texts are missing
+python eval/check_manifest.py              # Step 2 exit check
+```
