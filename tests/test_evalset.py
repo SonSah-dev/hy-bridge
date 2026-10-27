@@ -90,7 +90,7 @@ def test_complete_set_passes(tmp_path):
     r = check(m)
     assert r.ok, r.errors
     assert r.warnings == []
-    assert r.summary["clips"] == 15 and r.summary["under_1.5s"] == 3
+    assert r.summary["clips"] == 15 and r.summary["speech_under_1.5s"] == 3
 
 
 def test_missing_text_is_error_unless_draft(tmp_path):
@@ -139,7 +139,16 @@ def test_duplicate_ids_and_length_targets(tmp_path):
     r = check(m)
     assert any("duplicate" in e for e in r.errors)
     assert any("target is at least 15" in w for w in r.warnings)
-    assert any("under 1.5 s" in w for w in r.warnings)
+    assert any("under 1.5 s of speech" in w for w in r.warnings)
+
+
+def test_short_target_counts_speech_not_padding(tmp_path):
+    m = tmp_path / "manifest.jsonl"
+    (tmp_path / "audio").mkdir()
+    pad = np.full(int(0.3 * RATE), 1e-5, np.float32)
+    write_wav(tmp_path / "audio" / "mic-01.wav", np.concatenate([pad, tone(1.1), pad]))  # 1.7 s file
+    save_manifest(m, [Clip("mic-01", "audio/mic-01.wav", "mic", "me", 1.7, HY, EN)])
+    assert check(m).summary["speech_under_1.5s"] == 1
 
 
 def test_prompts_file_parses():

@@ -19,6 +19,7 @@ ID_PATTERN = re.compile(r"^(mic|call)-\d{2,3}$")
 ARMENIAN = re.compile(r"[Ա-և]")  # Armenian letters (upper, lower, ligature)
 
 # Length targets from D-012. Checked as warnings: the set is still usable if one is missed.
+# "Short" is measured on the speech itself (padding excluded); "long" on the file length.
 MIN_CLIPS = 15
 SHORT_MAX_S, MIN_SHORT = 1.5, 2
 LONG_MIN_S, MIN_LONG = 9.0, 2
@@ -175,6 +176,7 @@ def check(manifest: str | Path, draft: bool = False) -> Report:
 
     seen: set[str] = set()
     durations = []
+    speech = []
     for c in clips:
         where = c.id or "<no id>"
         if not ID_PATTERN.match(c.id):
@@ -214,6 +216,8 @@ def check(manifest: str | Path, draft: bool = False) -> Report:
             r.errors.append(f"{where}: expected 16 kHz mono, got {rate} Hz {ch} ch")
         actual = len(y) / rate / max(ch, 1)
         durations.append(actual)
+        b = speech_bounds(y, rate, pad_s=0.0) if ch == 1 else None
+        speech.append((b[1] - b[0]) / rate if b else 0.0)
         if abs(actual - c.duration_s) > DURATION_TOLERANCE_S:
             r.errors.append(f"{where}: duration_s {c.duration_s} but file is {actual:.2f} s")
         if actual > MAX_CLIP_S:
@@ -221,19 +225,19 @@ def check(manifest: str | Path, draft: bool = False) -> Report:
         if y.size and np.abs(y).max() >= 0.999:
             r.warnings.append(f"{where}: clipping detected")
 
-    short = sum(d < SHORT_MAX_S for d in durations)
+    short = sum(0 < s < SHORT_MAX_S for s in speech)
     long_ = sum(d >= LONG_MIN_S for d in durations)
     if len(clips) < MIN_CLIPS:
         r.warnings.append(f"{len(clips)} clips; target is at least {MIN_CLIPS}")
     if short < MIN_SHORT:
-        r.warnings.append(f"{short} clips under {SHORT_MAX_S} s; target is at least {MIN_SHORT}")
+        r.warnings.append(f"{short} clips with under {SHORT_MAX_S} s of speech; target is at least {MIN_SHORT}")
     if long_ < MIN_LONG:
         r.warnings.append(f"{long_} clips of {LONG_MIN_S:.0f} s or more; target is at least {MIN_LONG}")
     r.summary = {
         "clips": len(clips),
         "by_source": {s: sum(c.source == s for c in clips) for s in SOURCES},
         "total_s": round(sum(durations), 1),
-        f"under_{SHORT_MAX_S}s": short,
+        f"speech_under_{SHORT_MAX_S}s": short,
         f"{LONG_MIN_S:.0f}s_or_more": long_,
         "with_hy": sum(bool(c.hy.strip()) for c in clips),
         "with_en": sum(bool(c.en.strip()) for c in clips),

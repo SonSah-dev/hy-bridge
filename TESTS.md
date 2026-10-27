@@ -46,9 +46,13 @@ Optional, saves time in Step 7: during a test call with the two remote speakers 
 ## Step 2 — evaluation set (D-012)
 Record with `python eval/record_clip.py --prompt pNN` (prompts in `eval/prompts.md`), then fill `hy` and `en` in `eval/manifest.jsonl`.
 1. `python eval/check_manifest.py` prints **PASS**: every clip has a 16 kHz mono WAV whose length matches the manifest, an Armenian `hy` and an English `en` reference, valid ids and sources *(automatic)*
-2. Length targets met (≥ 15 clips, ≥ 2 under 1.5 s, ≥ 2 of 9 s or more): no length warnings *(automatic)*
+2. Length targets met (≥ 15 clips, ≥ 2 with under 1.5 s of speech, ≥ 2 of 9 s or more): no length warnings *(automatic)*
 3. Each `hy` is exactly what was said, including hesitations you want the ASR to output; each `en` is a natural translation *(manual)*
 4. The manifest contains no private details; `eval/audio/` stays out of git *(manual; `git status` shows no .wav)*
+
+**Result: PASSED 2026-10-27.** 15 mic clips, 129 s in total; 2 with under 1.5 s of speech, 6 of 9 s or more. `check_manifest.py` passes with one accepted warning: mic-07 is 18.5 s and ends mid-sentence.
+- **Conventions in `hy`:** numbers and years as digits; clock times in words; English names and terms (Amazon, AI/ML, production, Python, Git, version control) in Latin letters. Step 3 scoring should normalise case, and may need to treat digits and spelled-out numbers as equal.
+- **Manual checks:** the developer confirmed the texts match the recordings, and that names and details are invented or fine to commit.
 
 ## Speakers (Step 7) — default scenario from D-010
 Two remote Armenian speakers on separate devices, plus the developer on the mic.

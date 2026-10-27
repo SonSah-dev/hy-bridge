@@ -142,7 +142,7 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **References per clip:**
   - Armenian transcript in Armenian script, exactly as spoken, typed by the developer.
   - A short, natural English translation, so Step 4 ratings are consistent.
-- **Length targets:** about 10 clips of 2–8 s, 2–3 of about 9–12 s, 2–3 under 1.5 s (short replies; also Step 7's S3 case).
+- **Length targets:** about 10 clips of 2–8 s, 2–3 of about 9–12 s, 2–3 with under 1.5 s of **speech** (short replies; also Step 7's S3 case). Speech length excludes the trimming padding, so a 1.1 s reply in a 1.7 s file counts as short.
 - **Format:**
   - Clips are recorded through the capture layer (D-011), trimmed of leading/trailing silence, and saved as 16 kHz mono 16-bit WAV in `eval/audio/` (git-ignored).
   - `eval/manifest.jsonl` has one JSON object per clip. It is text only and **committed**; content is kept free of private details.
