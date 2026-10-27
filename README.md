@@ -24,7 +24,13 @@ All settings and test assumptions are listed, with their defaults, in [config.ex
 |---|---|---|---|
 | audio | `mic_device`, `system_device` | `default` | index, name substring or `default` |
 | audio | `fill_gaps`, `gap_threshold_ms` | `true`, 200 | loopback sends no data while nothing plays; gaps longer than this are filled with silence |
-| segmentation | `end_pause_ms`, `max_segment_s` | 600, 8.0 | end-of-phrase pause; forced cut |
+| segmentation | `end_pause_ms`, `max_segment_s` | 1000, 8.0 | end-of-phrase pause; forced cut (placed at the quietest point of the last 1.5 s) |
+| segmentation | `vad_threshold`, `pre_roll_ms`, `min_speech_ms` | 0.5, 200, 250 | Silero speech probability; audio kept before onset; shorter bursts dropped |
+| asr | `threads` | 2 | FastConformer threads (D-013) |
+| mt | `family`, `compute`, `beam_size`, `threads` | nllb, int8, 2, 4 | translation model and speed (D-015) |
+| text | `glossary`, `numbers_to_digits` | glossary.tsv, true | fixes applied to the Armenian text before translation (D-016) |
+| text | `phrasebook`, `min_letters` | phrasebook.tsv, 2 | short replies translated directly; shorter noise segments hidden (D-017) |
+| mt | `short_beam_size` | 4 | beam for 1–3 word segments not in the phrasebook (D-017) |
 | speakers | `min_segment_s`, `similarity_threshold`, `max_remote_speakers` | 1.0, unset, 4 | speaker assignment |
 | scenario | `remote_participants`, `separate_devices`, `turn_taking`, `call_app`, `output_setup` | 2, true, true, unspecified, unspecified | describes the test; recorded in reports only |
 
@@ -75,5 +81,25 @@ No model weights are included in this repository. Each model is downloaded from 
 | [Helsinki-NLP/opus-mt-hy-en](https://huggingface.co/Helsinki-NLP/opus-mt-hy-en) | measured alternative, not the default | Apache-2.0 |
 | onnx-asr, onnxruntime, CTranslate2, PyAudioWPatch | runtime | MIT |
 | sentencepiece | tokenisation | Apache-2.0 |
+| [Silero VAD](https://github.com/snakers4/silero-vad) | voice activity detection | MIT |
 
 **Attribution:** Armenian speech recognition uses *stt_hy_fastconformer_hybrid_large_pc* by NVIDIA, licensed CC-BY-4.0, converted to ONNX by OpenVoiceOS. Only the runtime format was changed, not the weights. Licences of components added in later steps (voice activity detection, speaker embeddings) are listed here as they are added. This is not legal advice.
+
+## Running it (Step 5: microphone)
+
+```powershell
+python translate.py --list                         # capture devices
+python translate.py                                # Windows default microphone; Ctrl+C to stop
+python translate.py --mic "Intel" --set segmentation.end_pause_ms=800
+python translate.py --wav eval/audio/mic-01.wav    # play a recording through the same path
+```
+
+Each phrase prints as `[time] Me: Armenian  →  English`. The Armenian shown is the text after the glossary and number fixes, i.e. what was translated. Every run writes `runs/<timestamp>/segments.jsonl` (texts and timings per segment) and `summary.json` (latency p50/p95/max). `runs/` is git-ignored because it contains transcripts.
+
+Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/silero_vad.onnx` from [snakers4/silero-vad](https://github.com/snakers4/silero-vad) (MIT).
+
+**Glossary:** add the names and English terms you expect in the interview to [glossary.tsv](glossary.tsv), written the way the ASR spells them in Armenian letters (check the Armenian part of the printed lines). This is the main fix for terms that would otherwise be mistranslated.
+
+**Phrasebook:** short replies (1–3 words) are looked up in [phrasebook.tsv](phrasebook.tsv) before translation, because the translation model often invents sentences for very short inputs. A greeting followed by a name keeps the name in Latin letters (`Ողջույն Սոնա ջան` → "Hello, Sona."). Add the short replies you expect.
+
+**Power:** keep the laptop plugged in. On battery, speech recognition and translation ran about twice as slowly (D-017).

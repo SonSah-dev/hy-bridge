@@ -64,6 +64,18 @@ Run `python eval/bench_mt.py` on the Step 2 set, translating both the `hy` refer
 
 **Result: PASSED 2026-10-27.** NLLB-200 distilled 600M, CTranslate2 int8, beam 2, 4 threads: chrF 60.8 from ASR output (opus-mt-hy-en: 40.4); median 0.73 s, max 1.72 s per segment. Manual rating: **11 of 15 understandable (73%)**; the developer's ratings matched Claude's provisional ones (`eval/results/mt-review-nllb-int8-b2-t4.csv`). Licence: NLLB accepted with README disclosure (D-005, 2026-10-27).
 
+## Step 5 — walking skeleton, mic path (D-016)
+Exit check: live `Me` lines from the microphone, and latency logged for every segment.
+1. **Playback run** *(automatic, done)*: `python translate.py --wav eval/audio/mic-*.wav` plays the 15 clips in real time through VAD → ASR → fixes → MT. Result 2026-10-27: 22 segments, latency p50 1.60 s, p95 2.15 s, max 2.35 s, none over 5 s.
+2. **Live run** *(manual)*: `python translate.py` (or `--mic "<name>"`). Speak interview-style Armenian for about 2 minutes, then press Ctrl+C. Pass if:
+   - every phrase prints as one `[time] Me: Armenian  →  English` line;
+   - `summary.json` in the run folder shows no segment over 5 s;
+   - no errors appear and Ctrl+C exits cleanly, printing the summary.
+
+   Note anything that reads wrong (split sentences, missed terms) for Step 8, and add new term spellings to `glossary.tsv`.
+
+**Result: PASSED 2026-10-27 (timing and lines); accuracy issues found and fixed (D-017).** 4 live runs, 33 segments, latency max 2.29 s, nothing over 5 s, clean exit. The developer reported wrong numbers, hallucinated short replies, noise lines and misrecognised terms. Numbers, short replies and noise are fixed and checked by replaying the logged segments. Misrecognised terms and names remain a known weakness, and the glossary must be prepared for the interview. **Run on mains power:** on battery the same playback run had p95 2.97 s. Second live run after the fixes (21:45): p95 1.64 s; numbers, short replies and most terms correct; version-control misspellings are now caught by fuzzy glossary matching (D-018).
+
 ## Speakers (Step 7) — default scenario from D-010
 Two remote Armenian speakers on separate devices, plus the developer on the mic.
 - [ ] **S1 turn-taking:** A and B alternate for ≥ 10 turns of 3–10 s each. Each person keeps one label (`Speaker 1` or `Speaker 2`) for the whole session.

@@ -1,0 +1,37 @@
+# Short replies translated directly instead of by NLLB, which hallucinates on 1-3 word
+# inputs (DECISIONS.md D-017). One entry per line: Armenian<TAB>English.
+# Matching ignores case and punctuation; "ջան" (dear) is ignored when other words remain.
+# A phrase followed by capitalised names keeps the names: "Ողջույն Սոնա" -> "Hello, Sona."
+ողջույն	Hello.
+բարեւ	Hi.
+բարեւ ձեզ	Hello.
+բարի լույս	Good morning.
+բարի օր	Good afternoon.
+բարի երեկո	Good evening.
+ցտեսություն	Goodbye.
+հաջողություն	Good luck.
+շնորհակալություն	Thank you.
+շատ շնորհակալություն	Thank you very much.
+շնորհակալ եմ	Thank you.
+մերսի	Thanks.
+խնդրեմ	You're welcome.
+այո	Yes.
+հա	Yeah.
+այո իհարկե	Yes, of course.
+իհարկե	Of course.
+ոչ	No.
+չէ	No.
+լավ	Okay.
+լավ եմ	I'm fine.
+ինչպես եք	How are you?
+ոնց ես	How are you?
+ներողություն	Sorry.
+կներեք	Excuse me.
+համաձայն եմ	I agree.
+ճիշտ է	That's right.
+մեկ րոպե	One moment.
+ջան	Dear.
+մամ	Mom.
+մամա	Mom.
+պապ	Dad.
+պապա	Dad.

@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from armtranslate.evalset import load_manifest  # noqa: E402
 from armtranslate.mt import SOURCES, Translator, model_dir  # noqa: E402
+from armtranslate.textfix import TextFixer  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 
@@ -74,11 +75,16 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--beam", type=int, default=4)
     ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument("--fix", action="store_true",
+                    help="apply glossary.tsv + numbers-to-digits to the ASR text first (D-016)")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     clips = [c for c in load_manifest(args.manifest) if c.hy.strip() and c.en.strip()]
     asr = load_asr(Path(args.asr_results))
+    if args.fix:
+        fixer = TextFixer(ROOT / "glossary.tsv")
+        asr = {k: fixer(v) for k, v in asr.items()}
     families = list(SOURCES) if args.family == "all" else [args.family]
     computes = ["int8", "float32"] if args.compute == "all" else [args.compute]
     out_dir = HERE / "results"
@@ -92,7 +98,7 @@ def main() -> int:
             tr = Translator(fam, q, threads=args.threads, beam_size=args.beam)
             load_s = time.perf_counter() - t
             rows = bench(tr, clips, asr, args.repeats)
-            tag = f"{fam}-{q}-b{args.beam}-t{args.threads}"
+            tag = f"{fam}-{q}-b{args.beam}-t{args.threads}" + ("-fix" if args.fix else "")
             ms = [r["ms_from_asr"] for r in rows]
             s = {"model": tag, "source": SOURCES[fam], "load_s": round(load_s, 2), "clips": len(rows),
                  "from_ref": scores(rows, "ref"), "from_asr": scores(rows, "asr"),

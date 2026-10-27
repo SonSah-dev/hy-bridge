@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_defaults_match_d010():
     c = Config()
     assert c.audio.mic_device is None and c.audio.system_device is None
-    assert c.segmentation.end_pause_ms == 600
+    assert c.segmentation.end_pause_ms == 1000   # D-010 default 600, changed by D-016
     assert c.segmentation.max_segment_s == 8.0
     assert c.speakers.min_segment_s == 1.0
     assert c.speakers.similarity_threshold is None

@@ -17,8 +17,27 @@ gap_threshold_ms = 200        # must exceed normal callback jitter (measured in 
 queue_seconds = 10.0          # buffered audio per source before chunks are dropped (and counted)
 
 [segmentation]
-end_pause_ms = 600            # end of phrase; lower = faster, higher = more complete sentences
+end_pause_ms = 1000           # end of phrase; lower = faster, higher = more complete sentences (D-016)
 max_segment_s = 8.0           # forced cut so long monologues stay within the 5 s latency budget
+vad_threshold = 0.5           # Silero speech probability that starts speech
+pre_roll_ms = 200             # audio kept before speech onset
+min_speech_ms = 250           # shorter voiced bursts are dropped
+
+[asr]
+threads = 2                   # FastConformer onnxruntime threads (D-013)
+
+[mt]
+family = "nllb"               # "nllb" (CC-BY-NC, non-commercial) or "opus" (Apache-2.0, weaker) (D-015)
+compute = "int8"              # "int8" or "float32" (must be converted into models/)
+beam_size = 2
+short_beam_size = 4           # 1-3 word segments not found in the phrasebook (D-017)
+threads = 4
+
+[text]
+glossary = "glossary.tsv"     # Armenian-letter spellings of terms, fixed before translation; "" = off
+numbers_to_digits = true      # spelled-out numbers >= 10 become digits before translation
+phrasebook = "phrasebook.tsv" # short replies translated directly, not by NLLB; "" = off
+min_letters = 2               # segments with fewer Armenian letters (noise, "«.") are not shown
 
 [speakers]
 min_segment_s = 1.0           # shorter system-audio segments do not create/assign a speaker

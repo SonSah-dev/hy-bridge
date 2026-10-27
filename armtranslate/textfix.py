@@ -1,0 +1,245 @@
+"""Fix-ups applied to the Armenian ASR text before translation (DECISIONS.md D-016).
+
+Step 4 showed two ASR -> MT failure patterns (D-015):
+  - English terms that the ASR writes in Armenian letters are mistranslated
+    (`փրադաքշ` -> "drill"). A user-editable glossary maps such spellings back to the term;
+    an Armenian case ending is kept after a hyphen, as in written Armenian (`Python-ը`).
+  - Spelled-out years and counts are misread (`երկու հազար քսաներկու` -> "1922").
+    Number words worth 10 or more become digits, which NLLB translates correctly.
+Single small numbers (`մեկ`, `չորս`) are left alone: `մեկ` also means "one/someone", and
+NLLB already handles them.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from .scoring import _ONES, _TEENS, _TENS, edit_distance
+
+ARM = "Ա-Ֆա-և"                # letters only; ՝ ՛ ՞ ՜ sit between the two ranges
+SUFFIXES = ("ներում", "ներից", "ների", "ները", "ներ", "ում", "ից", "ով", "ին", "ի", "ը", "ն")
+_TOKEN = re.compile(rf"[{ARM}]+|[^{ARM}]+")
+
+
+def load_glossary(path: str | Path) -> list[tuple[str, str]]:
+    """TSV: `<Armenian-letter spelling>\\t<term>`; '#' starts a comment. Longest spellings first."""
+    entries = []
+    for n, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        line = line.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        src, sep, dst = line.partition("\t")
+        if not sep or not src.strip() or not dst.strip():
+            raise ValueError(f"{path} line {n}: expected '<spelling><TAB><term>'")
+        entries.append((src.strip().lower(), dst.strip()))
+    return sorted(entries, key=lambda e: -len(e[0]))
+
+
+def apply_glossary(text: str, entries: list[tuple[str, str]], fuzzy: bool = True) -> str:
+    suffix = "|".join(SUFFIXES)
+    for src, dst in entries:
+        stem = r"\s+".join(map(re.escape, src.split()))
+        pat = re.compile(rf"(?<![{ARM}A-Za-z]){stem}({suffix})?(?![{ARM}])", re.IGNORECASE)
+        text = pat.sub(lambda m: dst + (f"-{m.group(1)}" if m.group(1) else ""), text)
+    return _fuzzy_glossary(text, entries) if fuzzy else text
+
+
+# The ASR spells a term differently almost every time (live runs, D-018): version control came
+# out as `վերժեն քընթրոլ`, `վերժան քընթրոլ`, `վեժին քընթրոլ`, `Վժըն քընթռոլ`. So glossary
+# words of FUZZY_GLOSSARY_MIN letters or more also match misspellings: one letter off for a
+# single-word entry; up to len/3 letters per word (same first letter) for multi-word entries,
+# where all words matching together is distinctive. Shorter words (`գիթ`) stay exact, so
+# `գիծ` ("line") never becomes Git, and `Ամառն` ("summer") is not Amazon.
+FUZZY_GLOSSARY_MIN = 6        # 5-letter `այթին` (Python) matched the unrelated `Այնին`
+
+
+def _glossary_word(entry: str, word: str, loose: bool) -> tuple[int, str] | None:
+    """(distance, case ending) if `word` is `entry` (possibly misspelt) plus an optional ending."""
+    w, e = word.lower(), entry
+    le = _letters(e)
+    best = None
+    for suf in ("", *SUFFIXES):
+        if suf and not w.endswith(suf):
+            continue
+        stem = w[: len(w) - len(suf)] if suf else w
+        if not stem:
+            continue
+        d = edit_distance(le, _letters(stem))
+        limit = len(le) // 3 if loose else 1
+        ok = d == 0 or (len(le) >= FUZZY_GLOSSARY_MIN and d <= limit and (d == 1 or stem[0] == e[0]))
+        if ok and (best is None or d < best[0]):
+            best = (d, suf)
+    return best
+
+
+def _fuzzy_glossary(text: str, entries: list[tuple[str, str]]) -> str:
+    tokens = _TOKEN.findall(text)
+    alpha = [i for i, t in enumerate(tokens) if t[0] in _ALPHA]
+    out, pos, n = [], 0, 0
+    while n < len(alpha):
+        done = False
+        for src, dst in entries:
+            ws = src.split()
+            span = alpha[n:n + len(ws)]
+            if len(span) < len(ws) or any(not all(tokens[k].isspace() for k in range(a + 1, b))
+                                          for a, b in zip(span, span[1:])):
+                continue
+            matches = [_glossary_word(e, tokens[i], loose=len(ws) > 1) for e, i in zip(ws, span)]
+            # every word must match; only the last may carry an ending
+            if all(m is not None for m in matches) and all(m[1] == "" for m in matches[:-1])                     and sum(m[0] for m in matches) > 0:
+                suf = matches[-1][1]
+                out.extend(tokens[pos:span[0]])
+                out.append(dst + (f"-{suf}" if suf else ""))
+                pos, n, done = span[-1] + 1, n + len(ws), True
+                break
+        if not done:
+            n += 1
+    out.extend(tokens[pos:])
+    return "".join(out)
+
+
+# ----------------------------------------------------------------- numbers
+#
+# Live runs (D-017) showed ASR number words that are slightly off (`քառասոուն`, `ութսանութ`,
+# `ին` for `ինը`) and stutters (`հինինգ`). Converting what parses and leaving the rest gave
+# confidently wrong digits ("1000 ին 188", 570000 -> 170000). So: accept one-letter variants
+# of long number words, and convert nothing when a garbled number word is next to the phrase.
+
+_VALUES = {w: i for i, w in enumerate(_ONES) if w}
+_VALUES.update({w: 10 + i for i, w in enumerate(_TEENS)})
+_VALUES["տաս"] = 10
+for t, tw in enumerate(_TENS):
+    if tw:
+        _VALUES[tw] = 10 * t
+        for o, ow in enumerate(_ONES):
+            if ow:
+                _VALUES[tw + ow] = 10 * t + o
+                _VALUES[tw + "ու" + ow] = 10 * t + o      # քսանուերեք (spoken "twenty and three")
+_SCALES = {"հարյուր": 100, "հազար": 1000}
+FUZZY_MIN_LEN = 6      # one-letter variants accepted only for words this long (not համար ~ հազար)
+NEAR_MIN_LEN = 6       # words this long within 2 letters of a number word block conversion
+
+
+def _letters(w: str) -> str:
+    return w.replace("ու", "ü")  # the vowel ու is one letter written with two characters
+
+
+_VOCAB = {_letters(v): v for v in (*_VALUES, *_SCALES)}
+
+
+def canonical(word: str) -> str | None:
+    """Number word for `word`, allowing one wrong letter in long words; None if not a number."""
+    w = word.lower()
+    if w in _VALUES or w in _SCALES:
+        return w
+    lw = _letters(w)
+    if len(lw) >= FUZZY_MIN_LEN:
+        close = [v for k, v in _VOCAB.items() if abs(len(k) - len(lw)) <= 1 and edit_distance(k, lw) == 1]
+        if len(close) == 1:
+            return close[0]
+    return None
+
+
+def near_number(word: str) -> bool:
+    """A garbled number word (e.g. the stutter `հինինգ`) that we cannot read safely."""
+    w = word.lower()
+    lw = _letters(w)
+    if canonical(w) is not None or len(lw) < NEAR_MIN_LEN:
+        return False
+    return any(abs(len(k) - len(lw)) <= 2 and edit_distance(k, lw) <= 2 for k in _VOCAB if len(k) >= 4)
+
+
+def _unsafe_neighbour(word: str) -> bool:
+    return canonical(word) is not None or near_number(word) or word.lower() == "ին"
+
+
+def _split_glued(word: str) -> list[str]:
+    """'երկուհազար' / 'երկուազար' (h dropped in speech) -> ['երկու', 'հազար']."""
+    for tail in ("հազար", "ազար", "հարյուր"):
+        head = word[: -len(tail)]
+        if word.endswith(tail) and head in _VALUES:
+            return [head, "հազար" if tail.endswith("ազար") else tail]
+    return [word]
+
+
+def _parse(words: list[str]) -> tuple[int, int] | None:
+    """Longest prefix of canonical number words that reads as one number -> (value, words used)."""
+    total = current = used = 0
+    for i, w in enumerate(words):
+        if w in _SCALES:
+            if w == "հազար":
+                total += (current or 1) * 1000
+                current = 0
+            else:
+                if current % 100:
+                    current = current - current % 100 + (current % 100) * 100
+                else:
+                    current += 100
+        elif w in _VALUES:
+            v = _VALUES[w]
+            if current % 100 and (v >= 10 or current % 10):
+                break  # "two three" is two numbers, not five
+            current += v
+        else:
+            break
+        used = i + 1
+    return (total + current, used) if used else None
+
+
+def numbers_to_digits(text: str, minimum: int = 10) -> str:
+    tokens = []
+    for tok in _TOKEN.findall(text):
+        tokens.extend(_split_glued(tok) if tok[0] in _ALPHA else [tok])
+    alpha = [i for i, tok in enumerate(tokens) if tok[0] in _ALPHA]
+
+    def joined(a: int, b: int) -> bool:  # only whitespace between tokens a and b
+        return all(tokens[k].isspace() for k in range(a + 1, b))
+
+    out, pos, n = [], 0, 0
+    while n < len(alpha):
+        i = alpha[n]
+        # the run of words joined by whitespace starting here
+        run = [i]
+        while n + len(run) < len(alpha) and joined(run[-1], alpha[n + len(run)]):
+            run.append(alpha[n + len(run)])
+        canon, exact = [], False
+        for k, idx in enumerate(run):
+            c = canonical(tokens[idx])
+            if c is None and tokens[idx].lower() == "ին" and k + 1 < len(run)                     and canonical(tokens[run[k + 1]]) in _SCALES:
+                c = "ինը"                                  # ASR drops the final ը before a scale
+            if c is None:
+                break
+            exact = exact or tokens[idx].lower() == c
+            canon.append(c)
+        parsed = _parse(canon) if canon else None
+        if parsed and parsed[0] >= minimum and exact:   # variants only next to a correctly spelled one
+            value, used = parsed
+            # a number word we could not read, right before or after: leave all the words alone
+            prev_bad = n > 0 and joined(alpha[n - 1], i) and _unsafe_neighbour(tokens[alpha[n - 1]])
+            nxt = run[used] if used < len(run) else None
+            next_bad = nxt is not None and _unsafe_neighbour(tokens[nxt])
+            if not prev_bad and not next_bad:
+                out.extend(tokens[pos:i])
+                out.append(str(value))
+                pos = run[used - 1] + 1
+                n += used
+                continue
+        n += 1
+    out.extend(tokens[pos:])
+    return "".join(out)
+
+
+_ALPHA = set(re.findall(rf"[{ARM}]", "".join(map(chr, range(0x0531, 0x0588)))))
+
+
+class TextFixer:
+    def __init__(self, glossary: str | Path | None, numbers: bool = True):
+        self.entries = load_glossary(glossary) if glossary else []
+        self.numbers = numbers
+
+    def __call__(self, text: str) -> str:
+        if self.entries:
+            text = apply_glossary(text, self.entries)
+        if self.numbers:
+            text = numbers_to_digits(text)
+        return text

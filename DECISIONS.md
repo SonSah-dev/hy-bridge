@@ -49,7 +49,7 @@ Published model claims are labelled *reported* until they have been reproduced h
   - BuzzASR: MIT
   - PyAudioWPatch: MIT
 - **Conflicting information:** WeSpeaker ResNet34 is tagged Apache-2.0 on Hugging Face, but WeSpeaker's documentation says VoxCeleb-trained models follow CC BY 4.0. It is treated conservatively as CC BY 4.0.
-- **Still to verify:** Silero VAD's licence at its source (Step 5).
+- **Verified 2026-10-27 (Step 5):** Silero VAD is MIT (official LICENSE file in snakers4/silero-vad).
 - **Verified 2026-10-27:** the OpenVoiceOS ONNX export repo is CC-BY-4.0 (Hugging Face metadata). Package metadata: `onnx-asr` MIT, onnxruntime MIT, CTranslate2 MIT, sentencepiece Apache-2.0, `Helsinki-NLP/opus-mt-hy-en` Apache-2.0.
 - **Pending decision (developer):** accept NLLB's non-commercial licence with disclosure in the README, or require permissively licensed models only.
 - **Update 2026-10-27 (D-015):** the only permissive MT measured (opus-mt-hy-en, Apache-2.0) is about 20 chrF points worse than NLLB.
@@ -113,7 +113,7 @@ Published model claims are labelled *reported* until they have been reproduced h
 |---|---|---|
 | Microphone device | Windows default WASAPI input | user may pick by index or name |
 | System-audio device | loopback of the Windows default output | user may pick by index or name |
-| End-of-phrase pause | 600 ms | trades latency against sentence completeness; tuned in Step 8 |
+| End-of-phrase pause | 600 ms → **1000 ms** (D-016) | trades latency against sentence completeness; 600 ms split spontaneous sentences; revisit in Step 8 |
 | Forced segment cut | 8 s | keeps long monologues within 5 s latency |
 | Minimum segment length for speaker assignment | 1.0 s | short segments give unreliable voice embeddings; tuned in Step 7 |
 | Speaker similarity threshold | to be measured (Step 7) | depends on call audio quality |
@@ -249,3 +249,102 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Open:**
   - **D-005 (decided 2026-10-27):** NLLB accepted with a README disclosure; opus-mt stays the permissive fallback. NLLB 1.3B (also CC-BY-NC) stays deferred: 600M meets the target.
   - **Call audio:** not measured yet (Step 7).
+
+## D-016 Walking skeleton, mic path: Silero VAD, segmentation, text fixes (Step 5)
+- **Date:** 2026-10-27 · **Status:** verified by playing the 15 eval clips through the full pipeline in real time. **The live microphone run by the developer is still pending** (TESTS.md §Step 5).
+- **Pipeline (`translate.py`, `armtranslate/pipeline.py`):** capture (D-011) → Silero VAD → `Segmenter` → FastConformer (D-013) → text fixes → NLLB-600M (D-015) → one terminal line `[time] Me: Armenian  →  English`.
+  - A single worker thread runs ASR and MT in order (D-010).
+  - Each segment is logged to `runs/<timestamp>/segments.jsonl`, with latency p50/p95/max in `summary.json`. `runs/` is git-ignored because it holds transcripts of real speech.
+  - `--wav` plays recordings through the same path in real time, so runs can be repeated without a microphone.
+- **VAD:** Silero VAD v5 ONNX (MIT; official LICENSE file checked), 32 ms windows, run on onnxruntime with one thread.
+- **Segmenter (`armtranslate/vad.py`):**
+  - Speech starts at probability ≥ `vad_threshold` (0.5) and ends after `end_pause_ms` below 0.35 (hysteresis).
+  - 200 ms of pre-roll is kept before the onset. Voiced bursts under 250 ms are dropped.
+  - **Forced cut at `max_segment_s` (8 s):** placed at the lowest VAD probability in the last 1.5 s (`FORCED_LOOKBACK_S`), so it falls between words. A 3 s lookback was tried first and rejected: the cut point is that far in the past when the segment closes, which would add up to 3 s of latency.
+  - Latency is measured from the end of the segment's last voiced chunk to the printed line.
+- **Text fixes before MT (`armtranslate/textfix.py`, `glossary.tsv`):**
+  - **Glossary:** user-editable TSV mapping Armenian-letter spellings to terms (`փայթեն` → Python). Armenian case endings are kept after a hyphen (`Python-ը`).
+  - **Numbers:** spelled-out numbers ≥ 10 become digits (`երկու հազար քսաներկու` → 2022), including the spoken `երկուազար`. Smaller numbers are left alone, because `մեկ` also means "one/someone".
+  - The printed Armenian is the fixed text, i.e. what was actually translated.
+  - Bug found and fixed: Armenian punctuation (՝ ՛ ՞) lies inside the Unicode range `Ա-և`, so word boundaries now use letters only (`Ա-Ֆա-և`).
+- **Effect of the fixes on the Step 4 benchmark** (NLLB int8, beam 2, translating the whole-clip ASR output): chrF **60.8 → 65.2**.
+  - Fixed: mic-06 "1922" → "2022"; mic-09 "drill" → "production"; mic-13 "PR" → "production"; mic-15 "neutral genes" → "version control".
+  - **Flattered:** the glossary entries were taken from these same 15 clips; there is no held-out set.
+  - **Brittle:** in the live runs, new ASR spellings slipped through (`Հայայիթենը` → "Hyacinth"; with the 600 ms setting `վերժան քընթրոլ` → "cheapest nitrogenous"; `գուգում` → "Cheating").
+- **End-to-end runs** (15 clips, 129 s of speech, 1.5 s silence between clips, real time, Core Ultra 5 125H):
+
+| `end_pause_ms` | Forced cut | Segments | Latency p50 | p95 | max | Over 5 s |
+|---|---|---|---|---|---|---|
+| 600 | at 8 s exactly | 26 | 1.12 s | 1.53 s | 1.61 s | 0 |
+| 1000 | at 8 s exactly | 22 | 1.52 s | 1.86 s | 1.87 s | 0 |
+| **1000** | **quietest point of last 1.5 s** | **22** | **1.60 s** | **2.15 s** | **2.35 s** | **0** |
+
+- **Decision: `end_pause_ms` 600 → 1000** (D-010 default changed). With 600 ms, natural pauses in spontaneous speech split sentences into fragments that translate into nonsense ("Ես աշխատել եմ" | "Ամազոնում…"; mic-08 split inside the word `իրական|ացրել`). 1000 ms costs about 0.4 s of latency, and p95 stays at about half the 4 s target. To be revisited in Step 8 with live conversation.
+- **Known weaknesses:**
+  - Sentence fragments (e.g. a lone "Հությունը" → "The story") still occur at long hesitations.
+  - ASR on a forced-cut continuation is worse than on the whole clip (mic-07's middle part).
+  - The 1.5 s lookback may find no real pause in very fast speech.
+  - All runs used trimmed, single-speaker playback through `--wav`: there was no microphone noise and no competing CPU load from the system-audio source (Step 6).
+
+## D-017 Live microphone findings: short replies, numbers, noise (Step 5)
+- **Date:** 2026-10-27 · **Status:** live runs by the developer; fixes verified by replaying the logged ASR text and on the eval set.
+- **Live runs:** 4 runs (`runs/20261027-201453`, `-210043`, `-210320`, `-210444`), 33 segments, laptop microphone (Intel Smart Sound).
+  - **Latency passed:** p95 1.51–2.06 s per run, max 2.29 s, nothing over 5 s.
+  - **Accuracy problems reported by the developer and confirmed in `segments.jsonl`:**
+    1. **Numbers.** The ASR wrote number words slightly off: `քառասոուն` (for `քառասուն`), `ութսանութ` (for `ութսունութ`), `ին` (for `ինը`), and the stutter `հինինգ`. The D-016 converter turned whatever parsed into digits and left the rest, giving **confidently wrong numbers**:
+       - `Տասներեք հազար ութ հարյուր քառասոուն` → "13800 քառասոուն" → "13800 square feet"
+       - `հազար ին հարյուր ութսունութ` → "1000 ին 188" → "born in 1881"
+       - `հինինգ հարյուր յոթանասուն հազար` (570 000) → "170000"
+    2. **Short replies hallucinated by NLLB,** although the ASR text was correct: `Հաջողություն։` → "What is the meaning of life?"; `Ողջույն Սոնա ջան։` → "I'm going to tell you something."; `Մամ ջան։` → "I'm going to be a mother."
+    3. **Noise segments** (`«.`, `Ե։`) were "translated" into invented sentences.
+    4. **Terms and names misrecognised by the ASR:** `Այթինը` (Python) → "Aitin"; `Սանաան` (Sona).
+- **Short-input tests** (9 phrases, NLLB-600M and opus-mt, beams 2 and 4, with `։`, `.`, `!` or no punctuation): no setting was reliable on 1–3 words.
+  - Beam 4 with `.` hallucinated least (`Հաջողություն` → "Successful.").
+  - Replacing `։` with `.` *lowered* chrF on the full eval sentences (65.2 → 62.5), so it is applied to short segments only.
+  - Beam 4 for everything was slower with no gain overall (chrF 64.6, max 3.4 s).
+- **Fixes:**
+  - **Phrasebook (`armtranslate/phrasebook.py`, `phrasebook.tsv`, user-editable):**
+    - Segments of 1–3 words are looked up first: greetings, thanks, yes/no, good luck, forms of address.
+    - The endearment `ջան` is ignored when other words remain.
+    - A phrase followed by capitalised words is treated as phrase + names, and the names are transliterated (Armenian → Latin): `Ողջույն Սոնա ջան` → "Hello, Sona."
+    - Short segments not in the phrasebook go to NLLB with beam 4 and `։` → `.` (`mt.short_beam_size`).
+    - A segment that is only a number is shown as is: NLLB invented "13840. What is it?".
+  - **Numbers (`armtranslate/textfix.py`):**
+    - A one-letter variant of a number word of 6+ letters is accepted. The vowel `ու` counts as one letter.
+    - `ին` before հարյուր/հազար reads as `ինը`, and `քսանուերեք` reads as 23.
+    - Variants are only accepted next to a correctly spelled number word.
+    - **If an unreadable number-like word is next to the phrase, nothing is converted** (the words go to MT unchanged). A wrong digit is worse than words.
+    - The replay caught a false variant, `համար` ("for") ~ `հազար` (thousand), which led to the 6-letter minimum.
+  - **Noise filter:** segments with fewer than 2 Armenian letters are not shown (`text.min_letters`); the count is in `summary.json`.
+- **Verification:**
+  - **Replaying the 33 logged live segments** through the new path (same ASR text, so speech-recognition errors remain):
+    - Every reported number case is now correct: "born in 1988" ×2, "1998", "23 years old", "13840".
+    - "Good luck.", "Hello, Sona.", "Hello, Sanaan.", "No.", "Dear.", "Mom." are correct.
+    - Both noise segments are hidden.
+    - The stutter case is no longer converted, but NLLB still reads `հինինգ հարյուր յոթանասուն հազար` as 170,000.
+  - **Eval set:** chrF unchanged at 65.2, so long sentences did not regress. 136 unit tests pass, including every live case above.
+  - **Full pipeline on the eval clips:** 22 segments, nothing over 5 s, but p95 2.97 s and max 3.2 s (it was 2.15/2.35 s). **The laptop was on battery** (Balanced plan, 76%): ASR on an 8 s segment took 0.5–0.77 s against 0.35 s plugged in (D-013). The slowest segments are all forced cuts, where the 1.5 s lookback adds to the wait. **Run the interview on mains power.**
+- **Still weak:**
+  - ASR misrecognition of English terms and non-Armenian names (`Այթինը`, `Հայայիթենը` for Python). The glossary only catches spellings already seen, so add likely terms and names before the interview.
+  - Number words that the ASR garbles badly are left as words, and NLLB may still misread them.
+  - Short phrases outside the phrasebook can still hallucinate.
+  - The phrasebook covers common replies only.
+
+## D-018 Fuzzy glossary matching (Step 5, second live check)
+- **Date:** 2026-10-27 · **Status:** verified on the developer's live run `runs/20261027-214510` (12 segments) and by replaying all 96 logged texts.
+- **Live run with the D-017 fixes:** p95 1.64 s, max 1.67 s.
+  - Correct: all numbers (1987, 7321, 688 including the variant `ութսանութ`, 2004), "Good luck.", Python, JavaScript, Google, Amazon.
+  - Misses reported by the developer: `Վժըն քընթռոլ` → "I'm going to take a shower."; also `վեժին քընթրոլ` → "low-carbohydrate diets", `Ողջույն Սոնաջան` → "Hello, Sonajan.", `Ամազո՞` → "What is it?".
+- **Finding:** the ASR spells the same term differently almost every time. Version control has come out as `վերժեն`/`վերժան`/`վեժին`/`Վժըն` + `քընթրոլ`/`քընթռոլ`. Adding exact spellings cannot keep up.
+- **Change (`armtranslate/textfix.py`):** after exact matching, glossary words of **6+ letters** (`ու` counts as one letter) also match misspellings:
+  - single-word entries: **1 letter** off;
+  - multi-word entries: up to **len/3 letters per word**, with the same first letter, because all words matching together is distinctive;
+  - shorter entries stay exact, so `գիծ` ("line") never becomes Git.
+- **Phrasebook:** a name with the endearment glued on (`Սոնաջան`) is read as `Սոնա`.
+- **Glossary:** added the observed variants `վժըն քընթռոլ`, `հայայիթեն`, `այթին`, `ջավասքրիպտ`/`ջավասքրփթ`.
+- **False positives found by replaying all 96 logged texts (fuzzy on vs off) and fixed:**
+  - With a 2-letter allowance on single words, `Ամառն` ("summer") → Amazon. Fixed by allowing only 1 letter for single-word entries.
+  - With a 5-letter minimum, `Այնին` → Python (via `այթին`). Fixed by raising the minimum to 6.
+  - After the fixes only 3 texts change, all correctly (`Ամազո՞` → Amazon, `վերժան`/`վեժին քընթրոլ` → version control). Unit tests cover both false positives.
+- **Result on the live run:** 11 of 12 lines now right. Changed: "Hello, Sona.", "Git is used for version control.", "version control.", "What about Amazon?". Eval chrF unchanged at 65.2. 145 unit tests pass.
+- **Still weak:** fragments the ASR garbles (`Աեից։` → "I'm going to tell you.") are too long for the noise filter and still get invented translations. Terms the ASR mangles beyond these limits still need explicit glossary entries.

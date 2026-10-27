@@ -1,0 +1,188 @@
+"""Live pipeline: capture -> VAD segments -> ASR -> text fixes -> MT -> terminal (Step 5, D-016).
+
+One reader loop per run pulls frames from each source and cuts segments; a single worker
+thread runs ASR and MT in order, so the CPU is never shared by two inferences (D-010).
+Every segment is logged as one JSON line with its timings; latency is measured from the
+end of the last voiced chunk to the moment the line is printed (TESTS.md).
+"""
+from __future__ import annotations
+
+import json
+import queue
+import sys
+import threading
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, TextIO
+
+import numpy as np
+
+from .audio import AudioFrame, wall_time
+from .evalset import read_wav
+from .textfix import _ALPHA
+from .vad import Segment
+
+LABELS = {"mic": "Me"}
+
+
+class FileSource:
+    """Plays a 16 kHz mono WAV as an `AudioSource`, paced in real time unless `realtime=False`.
+
+    Silence is added before and after so the segmenter can close the last phrase.
+    """
+
+    def __init__(self, path: str | Path, name: str = "mic", realtime: bool = True,
+                 frame_ms: int = 20, lead_s: float = 0.5, tail_s: float = 1.5):
+        y, rate, ch = read_wav(Path(path))
+        if rate != 16_000 or ch != 1:
+            raise ValueError(f"{path}: expected 16 kHz mono, got {rate} Hz {ch} ch")
+        pad = lambda s: np.zeros(int(s * rate), np.float32)  # noqa: E731
+        self.samples = np.concatenate([pad(lead_s), y, pad(tail_s)])
+        self.name, self.realtime = name, realtime
+        self._n = int(rate * frame_ms / 1000)
+        self._pos = 0
+        self._t0 = 0.0
+        self.finished = False
+
+    def start(self) -> None:
+        self._t0 = time.perf_counter()
+
+    def stop(self) -> None:
+        pass
+
+    def read(self, timeout: float | None = None) -> AudioFrame | None:
+        if self._pos >= len(self.samples):
+            self.finished = True
+            return None
+        t_frame = self._t0 + self._pos / 16_000
+        if self.realtime:
+            wait = t_frame + self._n / 16_000 - time.perf_counter()  # frame is "captured" at its end
+            if wait > 0:
+                time.sleep(wait)
+        chunk = self.samples[self._pos:self._pos + self._n]
+        self._pos += self._n
+        return AudioFrame(self.name, wall_time(t_frame), chunk)
+
+    def stats(self) -> dict:
+        return {"file_s": round(len(self.samples) / 16_000, 2)}
+
+
+@dataclass
+class Result:
+    source: str
+    label: str
+    t_start: float
+    duration_s: float
+    forced: bool
+    hy: str
+    hy_fixed: str
+    en: str
+    asr_s: float
+    mt_s: float
+    queue_s: float           # waiting for the worker after the segment closed
+    latency_s: float         # last voiced audio -> printed line
+    t_print: float
+
+    def line(self) -> str:
+        clock = datetime.fromtimestamp(self.t_start).strftime("%H:%M:%S")
+        return f"[{clock}] {self.label}: {self.hy_fixed}  →  {self.en}"
+
+
+@dataclass
+class Worker:
+    transcribe: Callable[[np.ndarray], str]
+    translate: Callable[[str], str]
+    fix: Callable[[str], str] = lambda s: s
+    out: TextIO = sys.stdout
+    log: TextIO | None = None
+    clock: Callable[[], float] = time.time
+    min_letters: int = 2                    # fewer Armenian letters: noise, not shown (D-017)
+    results: list[Result] = field(default_factory=list)
+    skipped: int = 0
+
+    def __post_init__(self):
+        self.q: queue.Queue[Segment | None] = queue.Queue()
+        self._thread = threading.Thread(target=self._run, name="inference", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def submit(self, seg: Segment) -> None:
+        self.q.put(seg)
+
+    def close(self) -> None:
+        """Finish queued segments, then stop."""
+        self.q.put(None)
+        self._thread.join()
+
+    def process(self, seg: Segment) -> Result | None:
+        t_dequeue = self.clock()
+        t = time.perf_counter()
+        hy = self.transcribe(seg.samples).strip()
+        asr_s = time.perf_counter() - t
+        if sum(ch in _ALPHA for ch in hy) < self.min_letters:
+            self.skipped += 1
+            return None
+        fixed = self.fix(hy)
+        t = time.perf_counter()
+        en = self.translate(fixed)
+        mt_s = time.perf_counter() - t
+        t_print = self.clock()
+        r = Result(seg.source, LABELS.get(seg.source, seg.source), seg.t_start, round(seg.duration_s, 2),
+                   seg.forced, hy, fixed, en, round(asr_s, 3), round(mt_s, 3),
+                   round(max(0.0, t_dequeue - seg.t_emit), 3), round(t_print - seg.t_last_voice, 3), t_print)
+        print(r.line(), file=self.out, flush=True)
+        if self.log is not None:
+            self.log.write(json.dumps(r.__dict__, ensure_ascii=False) + "\n")
+            self.log.flush()
+        self.results.append(r)
+        return r
+
+    def _run(self) -> None:
+        while True:
+            seg = self.q.get()
+            if seg is None:
+                return
+            try:
+                self.process(seg)
+            except Exception as e:  # one bad segment must not stop the session
+                print(f"[error] segment at {seg.t_start:.2f}: {type(e).__name__}: {e}", file=sys.stderr)
+
+
+def latency_summary(results: list[Result]) -> dict:
+    if not results:
+        return {"segments": 0}
+    lat = np.array([r.latency_s for r in results])
+    return {"segments": len(results), "latency_p50_s": round(float(np.percentile(lat, 50)), 2),
+            "latency_p95_s": round(float(np.percentile(lat, 95)), 2), "latency_max_s": round(float(lat.max()), 2),
+            "over_5s": int((lat > 5.0).sum()), "asr_max_s": max(r.asr_s for r in results),
+            "mt_max_s": max(r.mt_s for r in results), "queue_max_s": max(r.queue_s for r in results)}
+
+
+def run(sources: dict, segmenters: dict, worker: Worker, stop: threading.Event | None = None) -> None:
+    """Read all sources until `stop` is set (or every FileSource has finished)."""
+    stop = stop or threading.Event()
+    for s in sources.values():
+        s.start()
+    worker.start()
+    try:
+        while not stop.is_set():
+            got = False
+            for name, src in sources.items():
+                frame = src.read(timeout=0.02)
+                if frame is not None:
+                    got = True
+                    for seg in segmenters[name].push(frame):
+                        worker.submit(seg)
+            if not got and all(getattr(s, "finished", False) for s in sources.values()):
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for name, src in sources.items():
+            src.stop()
+            for seg in segmenters[name].flush():
+                worker.submit(seg)
+        worker.close()

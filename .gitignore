@@ -29,3 +29,6 @@ models/
 # Raw Claude exports (kept privately, not committed)
 exports/
 *.zip
+
+# Pipeline run logs (contain transcripts of real speech)
+runs/
