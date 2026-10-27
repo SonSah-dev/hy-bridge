@@ -1,0 +1,57 @@
+"""Armenian -> English translation with CTranslate2 on the CPU (DECISIONS.md D-003, D-015).
+
+Two model families, both converted from the official Hugging Face repos with
+`ct2-transformers-converter` into `models/` (git-ignored); see eval/bench_mt.py:
+  - "opus": Helsinki-NLP/opus-mt-hy-en (Marian, Apache-2.0)
+  - "nllb": facebook/nllb-200-distilled-600M (CC-BY-NC-4.0, non-commercial)
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+SOURCES = {"opus": "Helsinki-NLP/opus-mt-hy-en", "nllb": "facebook/nllb-200-distilled-600M"}
+DIRS = {"opus": "opus-mt-hy-en-ct2-{q}", "nllb": "nllb-600m-ct2-{q}"}
+NLLB_SRC, NLLB_TGT = "hye_Armn", "eng_Latn"
+
+
+def model_dir(family: str, compute: str) -> Path:
+    return MODELS_DIR / DIRS[family].format(q=compute)
+
+
+class Translator:
+    """`family` is "opus" or "nllb"; `compute` is "int8" or "float32" (the converted weights)."""
+
+    def __init__(self, family: str, compute: str = "int8", threads: int = 2, beam_size: int = 4,
+                 path: str | Path | None = None):
+        import ctranslate2
+        import sentencepiece as spm
+
+        if family not in SOURCES:
+            raise ValueError(f"family must be one of {sorted(SOURCES)}, got {family!r}")
+        path = Path(path) if path else model_dir(family, compute)
+        if not (path / "model.bin").exists():
+            raise FileNotFoundError(f"no CTranslate2 model in {path}; see eval/bench_mt.py --help")
+        self.family, self.compute, self.threads, self.beam_size = family, compute, threads, beam_size
+        self._tr = ctranslate2.Translator(str(path), device="cpu", compute_type=compute,
+                                          intra_threads=threads, inter_threads=1)
+        if family == "nllb":
+            self._src = self._tgt = spm.SentencePieceProcessor(model_file=str(path / "sentencepiece.bpe.model"))
+        else:
+            self._src = spm.SentencePieceProcessor(model_file=str(path / "source.spm"))
+            self._tgt = spm.SentencePieceProcessor(model_file=str(path / "target.spm"))
+
+    def translate(self, text: str) -> str:
+        text = text.strip()
+        if not text:
+            return ""
+        pieces = self._src.encode(text, out_type=str)
+        if self.family == "nllb":
+            out = self._tr.translate_batch([[NLLB_SRC] + pieces + ["</s>"]], target_prefix=[[NLLB_TGT]],
+                                           beam_size=self.beam_size, max_decoding_length=256)
+            tokens = [t for t in out[0].hypotheses[0] if t != NLLB_TGT]
+        else:
+            out = self._tr.translate_batch([pieces + ["</s>"]], beam_size=self.beam_size,
+                                           max_decoding_length=256)
+            tokens = out[0].hypotheses[0]
+        return self._tgt.decode(tokens).strip()

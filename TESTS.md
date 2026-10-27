@@ -59,6 +59,11 @@ Run `python eval/bench_asr.py` on the Step 2 set. Exit check: CER and real-time 
 
 **Result: PASSED 2026-10-27.** FastConformer ONNX, fp32, 2 threads: **CER 8.2%** (2.9% on the 10 clips without English terms), WER 18.9%, **RTF 0.042**; slowest clip 0.71 s for 18.5 s of audio. int8 was worse on both counts. Main error source: English terms written in Armenian letters. Mic clips only; call audio is measured in Step 7.
 
+## Step 4 — translation (D-015)
+Run `python eval/bench_mt.py` on the Step 2 set, translating both the `hy` reference and the Step 3 ASR output. Exit check: choice recorded in DECISIONS.md; ≥ 70% of segments rated "understandable" (from ASR output); time per segment leaves room in the 5 s budget.
+
+**Result: PASSED (provisional) 2026-10-27.** NLLB-200 distilled 600M, CTranslate2 int8, beam 2, 4 threads: chrF 60.8 from ASR output (opus-mt-hy-en: 40.4); median 0.73 s, max 1.72 s per segment. Claude's provisional rating: 11 of 15 understandable (73%). **To do (developer):** fill the `understandable` column in `eval/results/mt-review-nllb-int8-b2-t4.csv` and confirm ≥ 70%. Licence: NLLB accepted with README disclosure (D-005, 2026-10-27).
+
 ## Speakers (Step 7) — default scenario from D-010
 Two remote Armenian speakers on separate devices, plus the developer on the mic.
 - [ ] **S1 turn-taking:** A and B alternate for ≥ 10 turns of 3–10 s each. Each person keeps one label (`Speaker 1` or `Speaker 2`) for the whole session.
