@@ -1,0 +1,24 @@
+# Armenian-letter spellings the ASR produces for terms, and the term to use instead.
+# Applied before translation (DECISIONS.md D-016). One entry per line: spelling<TAB>term.
+# Matching ignores case; an Armenian ending after the spelling is kept: փայթենը -> Python-ը.
+# Add the names and terms you expect in the interview. The entries below were seen in the
+# Step 3 eval clips, so they flatter the eval scores; see D-016.
+փայթեն	Python
+փայթոն	Python
+գիթ	Git
+ամազոն	Amazon
+ամազեն	Amazon
+գուգլ	Google
+փրադաքշն	production
+փրադաքշ	production
+փրոդաքշն	production
+վերժեն քընթրոլ	version control
+վժըն քընթռոլ	version control
+հայայիթեն	Python
+այթին	Python
+ջավասքրիպտ	JavaScript
+ջավասքրփթ	JavaScript
+էյ այ	AI
+էյայ	AI
+էմ էլ	ML
+էմել	ML

@@ -41,17 +41,42 @@ class Translator:
             self._src = spm.SentencePieceProcessor(model_file=str(path / "source.spm"))
             self._tgt = spm.SentencePieceProcessor(model_file=str(path / "target.spm"))
 
-    def translate(self, text: str) -> str:
+    def translate(self, text: str, beam_size: int | None = None) -> str:
         text = text.strip()
         if not text:
             return ""
+        beam = beam_size or self.beam_size
         pieces = self._src.encode(text, out_type=str)
         if self.family == "nllb":
             out = self._tr.translate_batch([[NLLB_SRC] + pieces + ["</s>"]], target_prefix=[[NLLB_TGT]],
-                                           beam_size=self.beam_size, max_decoding_length=256)
+                                           beam_size=beam, max_decoding_length=256)
             tokens = [t for t in out[0].hypotheses[0] if t != NLLB_TGT]
         else:
-            out = self._tr.translate_batch([pieces + ["</s>"]], beam_size=self.beam_size,
-                                           max_decoding_length=256)
+            out = self._tr.translate_batch([pieces + ["</s>"]], beam_size=beam, max_decoding_length=256)
             tokens = out[0].hypotheses[0]
         return self._tgt.decode(tokens).strip()
+
+
+class SegmentTranslator:
+    """MT for one pipeline segment, with special handling for short replies (D-017).
+
+    1-3 word segments: phrasebook first; otherwise NLLB with a wider beam and `։` -> `.`,
+    which hallucinated less on short inputs. Longer segments go to NLLB unchanged (the `.`
+    replacement lowered chrF on full sentences, 65.2 -> 62.5).
+    """
+
+    def __init__(self, translator: Translator, phrasebook=None, short_beam: int = 4):
+        from .phrasebook import MAX_WORDS, words
+        self.translator, self.phrasebook, self.short_beam = translator, phrasebook, short_beam
+        self._words, self._max_words = words, MAX_WORDS
+
+    def __call__(self, text: str) -> str:
+        if not self._words(text) and any(ch.isdigit() for ch in text):
+            return text.replace("։", ".").strip()     # a bare number: NLLB invents a sentence around it
+        if self.phrasebook is not None:
+            hit = self.phrasebook.lookup(text)
+            if hit is not None:
+                return hit
+        if len(self._words(text)) <= self._max_words:
+            return self.translator.translate(text.replace("։", "."), beam_size=self.short_beam)
+        return self.translator.translate(text)

@@ -30,8 +30,33 @@ class AudioConfig:
 
 @dataclass(frozen=True)
 class SegmentationConfig:
-    end_pause_ms: int = 600                # end of phrase; trades latency vs completeness (Step 8)
+    end_pause_ms: int = 1000               # end of phrase; 600 split spontaneous sentences (D-016)
     max_segment_s: float = 8.0             # forced cut, keeps monologues within the 5 s budget
+    vad_threshold: float = 0.5             # Silero speech probability that starts speech
+    pre_roll_ms: int = 200                 # audio kept before speech onset, so first syllables survive
+    min_speech_ms: int = 250               # shorter voiced bursts (clicks, coughs) are dropped
+
+
+@dataclass(frozen=True)
+class AsrConfig:
+    threads: int = 2                       # onnxruntime intra-op threads; 2 beat the default (D-013)
+
+
+@dataclass(frozen=True)
+class MtConfig:
+    family: str = "nllb"                   # "nllb" (CC-BY-NC) or "opus" (Apache-2.0, weaker) (D-015)
+    compute: str = "int8"                  # converted weights: "int8" or "float32"
+    beam_size: int = 2
+    short_beam_size: int = 4               # for 1-3 word segments not in the phrasebook (D-017)
+    threads: int = 4
+
+
+@dataclass(frozen=True)
+class TextConfig:
+    glossary: str = "glossary.tsv"         # Armenian-letter spellings -> terms, applied before MT; "" = off
+    numbers_to_digits: bool = True         # spelled-out numbers >= 10 become digits before MT
+    phrasebook: str = "phrasebook.tsv"     # short replies translated directly; "" = off (D-017)
+    min_letters: int = 2                   # segments with fewer Armenian letters are not shown
 
 
 @dataclass(frozen=True)
@@ -55,6 +80,9 @@ class ScenarioConfig:
 class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     segmentation: SegmentationConfig = field(default_factory=SegmentationConfig)
+    asr: AsrConfig = field(default_factory=AsrConfig)
+    mt: MtConfig = field(default_factory=MtConfig)
+    text: TextConfig = field(default_factory=TextConfig)
     speakers: SpeakerConfig = field(default_factory=SpeakerConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
 
