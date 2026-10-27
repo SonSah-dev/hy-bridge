@@ -22,6 +22,7 @@ Published model claims are labelled *reported* until they have been reproduced h
   - Omnilingual ASR: Windows support unverified.
 - **To verify:** CER and real-time factor on our own conversational clips (step 3).
 - **Update 2026-10-25 (D-009):** the BuzzASR experiment is deferred; only run if FastConformer fails Step 3.
+- **Update 2026-10-27 (D-013):** FastConformer passed Step 3 (8.2% CER, RTF 0.04 on CPU); it is the ASR. BuzzASR is not needed.
 
 ## D-003 Translation candidate (not validated)
 - **Date:** 2026-10-25 · **Status:** proposed
@@ -149,3 +150,23 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Tools:**
   - `eval/record_clip.py` records one clip and adds its manifest row.
   - `eval/check_manifest.py` validates the set; it is Step 2's exit check.
+
+## D-013 ASR: FastConformer ONNX, fp32, 2 threads (Step 3)
+- **Date:** 2026-10-27 · **Status:** verified on the 15 mic clips (D-012); call audio still to measure (Step 7)
+- **Setup:** `OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx` (CTC head of the hybrid model; licence CC-BY-4.0, attribution in the README) with `onnx-asr` 0.12.0 (MIT) and onnxruntime 1.31.1 (MIT), CPU only, Python 3.14. Script: `eval/bench_asr.py`; per-clip results in `eval/results/asr-*.jsonl`.
+- **Scoring (`armtranslate/scoring.py`):** both texts lower-cased, `և` → `եւ`, punctuation removed (Armenian ՞ ՛ ՜ deleted inside words), digits expanded to Eastern Armenian number words. CER counts spaces. Timing is the median of 3 runs after a warm-up; RTF = compute / audio length.
+- **Results (whole clips, Intel Core Ultra 5 125H):**
+
+| Variant | CER | WER | CER, 10 clips without English terms | RTF | Slowest clip |
+|---|---|---|---|---|---|
+| **fp32, 2 threads** | **8.2%** | 18.9% | **2.9%** | **0.042** | 0.71 s (mic-07, 18.5 s) |
+| fp32, onnxruntime default threads | 8.2% | 18.9% | 2.9% | 0.057 | 0.83 s (mic-08, 12.8 s) |
+| int8 (`model.int8.onnx`) | 8.6% | 20.9% | 3.7% | 0.067 | 1.38 s (mic-07) |
+
+- **Decision:** fp32 with 2 intra-op threads. int8 is less accurate *and* slower here, so it is dropped. Two threads beat the default (all cores), probably because the default spreads work over the slower E-cores; it also leaves cores free for translation. The thread count is a setting, to be re-checked in Step 8.
+- **Internal target met:** CER ≤ 20% (TESTS.md). Speed leaves wide margin: an 8 s forced segment (D-010) costs ≈ 0.35 s of ASR.
+- **Error types seen:**
+  - English terms are written phonetically in Armenian letters (`Amazon-ում` → `ամազոնում`, `Python` → `փայթեն`, `AI/ML` → `էյայի էմել`). These account for most of the CER (5 clips, up to 37.5%). The text stays readable; Step 4 checks whether MT recovers the terms.
+  - Short endings dropped or changed: the article `ը` (`հարցը` → `հարց`), `ք` (`կկրկնեք` → `կկրկնե`), `եմ` → `է`, `ժամը իննին` → `ժամ ին`.
+  - The model card says there is no int8 variant, but the repo now ships `model.int8.onnx`; it runs on CPU.
+- **Not yet known:** accuracy on call-compressed audio and on VAD-cut segments rather than hand-trimmed clips (Steps 5 and 7). BuzzASR stays deferred (D-009): FastConformer passed.
