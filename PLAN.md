@@ -12,7 +12,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 | Mon 26 | 3 | ASR: FastConformer ONNX — CER + real-time factor on CPU | 1.5 | Results in DECISIONS.md | done 2026-10-27 (D-013) |
 | Mon 26 | 4 | Translation: NLLB-600M — quality + speed on CPU | 0.75 | Choice recorded | done 2026-10-27 (D-015); NLLB licence accepted (D-005) |
 | Mon 26 | 5 | Walking skeleton, mic path: capture → VAD → ASR → MT → terminal, latency logged | 2.0 | Live `Me` lines; latency logged per segment | done 2026-10-27: playback and live runs pass; live accuracy fixes (D-016, D-017, D-018) |
-| Tue 27 | 6 | Add loopback source, single inference worker, configuration (D-010/D-011) | 1.5 | Both sources print; settings come from config | — |
+| Tue 27 | 6 | Add loopback source, single inference worker, configuration (D-010/D-011) | 1.5 | Both sources print; settings come from config | done 2026-10-28: playback, live loopback and live call pass (D-019) |
 | Tue 27 | 7 | Speaker clustering + test call: 2 remote speakers on separate devices, taking turns | 2.5 | TESTS.md §Speakers | — |
 | Tue 27 | 8 | Latency hardening during a live call | 1.0 | p95 within target | — |
 | Wed 28 | 9 | Full rehearsal on the interview setup | 1.0 | TESTS.md checklist passes | — |
@@ -24,5 +24,15 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 - ~~BuzzASR/OpenVINO experiment~~: run anyway on 2026-10-27 and rejected; less accurate and too slow (D-014).
 - NLLB 1.3B: only if 600M's quality fails and latency allows.
 - Chat converter: built during Step 10 at the latest.
+
+**Backlog (noted 2026-10-27, to come back to):**
+- **Challenge-specific eval set.** A second, small, carefully transcribed set aimed at the errors seen live (D-017, D-018), kept separate from the 15 Step 2 clips. The current glossary was tuned on those clips, so this set is also the held-out check D-016 lacks. Include real examples of:
+  - numbers: `13,800`, dates, times, Armenian number words;
+  - English terms inside Armenian sentences: Python, GitHub, API, Docker, Kubernetes;
+  - names and places: people, companies, Armenian cities;
+  - short phrases and greetings;
+  - normal conversational speech from both the microphone and system audio.
+- **Names in translations** (live call, D-019): `Սաթենիկ ջան` → "Satanic" / "Mr. Sattenik", `Սանաջան` → "Sana". Ideas: a names list (Armenian → Latin) applied before MT the way the glossary is, transliterating capitalised names that aren't in it, and dropping `ջան` before NLLB everywhere, not only in the phrasebook.
+- **Invented translations of garbled ASR** (D-017, D-019): unclear speech gives non-words that NLLB turns into fluent, wrong English. Idea: a confidence check (ASR score or share of unknown words) that shows the Armenian with `[unclear]` instead of a translation.
 
 **Working rules:** small verified commits; change one thing at a time; stop and rethink after 3 failed attempts; no silent fallbacks.

@@ -46,3 +46,9 @@ def test_overrides(tmp_path):
 def test_bad_overrides_are_errors(override):
     with pytest.raises(ValueError):
         load_config(None, [override])
+
+
+def test_both_sources_on_by_default():
+    a = Config().audio
+    assert a.use_mic and a.use_system
+    assert load_config(None, ["audio.use_system=false"]).audio.use_system is False

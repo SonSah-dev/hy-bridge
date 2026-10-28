@@ -18,6 +18,8 @@ DeviceSpec = int | str | None
 
 @dataclass(frozen=True)
 class AudioConfig:
+    use_mic: bool = True                   # capture the microphone ("Me")
+    use_system: bool = True                # capture system audio (the call, via loopback) (D-019)
     mic_device: DeviceSpec = None          # None = Windows default WASAPI input
     system_device: DeviceSpec = None       # None = loopback of the Windows default output
     sample_rate: int = 16_000              # pipeline format: mono float32 at this rate

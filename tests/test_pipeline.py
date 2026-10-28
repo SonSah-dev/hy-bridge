@@ -59,3 +59,31 @@ def test_noise_segments_not_shown():
     assert w.skipped == 1 and out.getvalue() == ""
     w.transcribe = lambda s: "Ե։"                       # one letter: still noise
     assert w.process(Segment("mic", 0, 0, 0, np.zeros(10, np.float32))) is None
+
+
+def test_two_sources_interleave_with_labels(tmp_path):
+    # mic speaks first, the call answers while the mic is silent, then both overlap
+    mic = np.concatenate([tone(1.0), np.zeros(48_000, np.float32), tone(1.0), np.zeros(32_000, np.float32)])
+    sysa = np.concatenate([np.zeros(28_000, np.float32), tone(1.0), np.zeros(24_000, np.float32),
+                           tone(1.2), np.zeros(32_000, np.float32)])
+    write_wav(tmp_path / "m.wav", mic)
+    write_wav(tmp_path / "s.wav", sysa)
+    sources = {"mic": FileSource(tmp_path / "m.wav", "mic", realtime=False),
+               "system": FileSource(tmp_path / "s.wav", "system", realtime=False)}
+    segs = {n: Segmenter(n, energy_vad, SegmentationConfig()) for n in sources}
+    out = io.StringIO()
+    w = Worker(lambda s: "Ձայն", lambda s: s, out=out)
+    run(sources, segs, w)
+    assert [r.label for r in w.results].count("Me") == 2
+    assert [r.label for r in w.results].count("Remote") == 2
+    starts = [r.t_start for r in w.results]
+    assert starts[0] == min(starts)                    # the mic phrase came first and printed first
+
+
+def test_realtime_file_source_does_not_block_when_not_due(tmp_path):
+    write_wav(tmp_path / "a.wav", tone(1.0))
+    src = FileSource(tmp_path / "a.wav", realtime=True, lead_s=0.0)
+    src.start()
+    assert src.read(timeout=0) is None                 # first 20 ms frame is not captured yet
+    assert src.read(timeout=0.05) is not None          # waits for it when allowed to
+    assert not src.finished
