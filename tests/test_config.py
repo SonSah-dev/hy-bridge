@@ -13,7 +13,8 @@ def test_defaults_match_d010():
     assert c.segmentation.end_pause_ms == 1000   # D-010 default 600, changed by D-016
     assert c.segmentation.max_segment_s == 8.0
     assert c.speakers.min_segment_s == 1.0
-    assert c.speakers.similarity_threshold is None
+    assert c.speakers.similarity_threshold == 0.4   # measured offline in Step 7 (D-020)
+    assert c.speakers.short_threshold is None and c.speakers.enabled
     assert c.speakers.max_remote_speakers == 4
     assert c.scenario.remote_participants == 2 and c.scenario.separate_devices
 
@@ -33,11 +34,13 @@ def test_overrides(tmp_path):
     f = tmp_path / "c.toml"
     f.write_text('[audio]\nsystem_device = "Realtek"\n[speakers]\nmin_segment_s = 2\n', encoding="utf-8")
     c = load_config(f, ["audio.mic_device=5", "speakers.similarity_threshold=0.7",
-                        "audio.fill_gaps=false", "scenario.call_app=Zoom"])
+                        "audio.fill_gaps=false", "scenario.call_app=Zoom",
+                        "speakers.short_threshold=0.3"])
     assert c.audio.system_device == "Realtek"
     assert c.audio.mic_device == 5
     assert c.speakers.min_segment_s == 2.0
     assert c.speakers.similarity_threshold == 0.7
+    assert c.speakers.short_threshold == 0.3
     assert c.audio.fill_gaps is False
     assert c.scenario.call_app == "Zoom"
 

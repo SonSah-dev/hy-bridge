@@ -63,9 +63,12 @@ class TextConfig:
 
 @dataclass(frozen=True)
 class SpeakerConfig:
-    min_segment_s: float = 1.0             # shorter segments are not used to assign a speaker
-    similarity_threshold: float | None = None  # to be measured in Step 7
+    enabled: bool = True                   # false: system audio is labelled "Remote" (D-020)
+    min_segment_s: float = 1.0             # shorter segments never create or move a speaker
+    similarity_threshold: float = 0.4      # cosine to a speaker's centroid; offline estimate (D-020)
+    short_threshold: float | None = None   # for shorter segments; None = similarity_threshold
     max_remote_speakers: int = 4           # safety cap; the brief requires at least 2
+    threads: int = 2                       # onnxruntime threads for the speaker embedding
 
 
 @dataclass(frozen=True)

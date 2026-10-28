@@ -78,6 +78,10 @@ Exit check: live `Me` lines from the microphone, and latency logged for every se
 
 ## Speakers (Step 7) — default scenario from D-010
 Two remote Armenian speakers on separate devices, plus the developer on the mic.
+
+**How to run** *(manual)*: wear headphones, join the call, run `python translate.py --record` and go through S1–S5 (about 10 minutes in all), then Ctrl+C. Ask A and B to leave a short pause (about 1 s) before answering. Check the printed labels; `summary.json` → `speakers` shows how many labels were made. `--record` keeps `input-system.wav`, so the threshold can be re-tuned offline with `python translate.py --wav-system runs/<run>/input-system.wav --set speakers.similarity_threshold=…`.
+
+**Offline check done 2026-10-28** (D-020, `eval/bench_speakers.py`): three voices (developer's 15 clips + pyannote's two-speaker sample), segments ≥ 1 s all labelled right at threshold 0.3–0.4, wideband and 8 kHz narrowband. Short segments: 0 of 3 right (shown as `Speaker ?`). Unit tests cover S1, S2, S4 and the cap (S5) with synthetic voices.
 - [ ] **S1 turn-taking:** A and B alternate for ≥ 10 turns of 3–10 s each. Each person keeps one label (`Speaker 1` or `Speaker 2`) for the whole session.
 - [ ] **S2 return after silence:** A speaks, B speaks, 60 s of silence, then A speaks again. A keeps the original label.
 - [ ] **S3 short turns:** replies under 1.5 s. Record the labelling accuracy separately; this is a known weak case.

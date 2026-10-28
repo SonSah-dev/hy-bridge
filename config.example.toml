@@ -6,7 +6,7 @@
 
 [audio]
 use_mic = true                # capture the microphone (lines labelled "Me")
-use_system = true             # capture system audio, i.e. the call (lines labelled "Remote" until Step 7)
+use_system = true             # capture system audio, i.e. the call (lines labelled "Speaker 1", "Speaker 2", ...)
 # Devices: "default", an index from --list, or part of the device name.
 mic_device = "default"        # Windows default WASAPI input
 system_device = "default"     # loopback of the Windows default output.
@@ -42,9 +42,13 @@ phrasebook = "phrasebook.tsv" # short replies translated directly, not by NLLB; 
 min_letters = 2               # segments with fewer Armenian letters (noise, "«.") are not shown
 
 [speakers]
-min_segment_s = 1.0           # shorter system-audio segments do not create/assign a speaker
-# similarity_threshold = 0.6  # unset until measured in Step 7
+enabled = true                # false (or --no-speakers): system audio is labelled "Remote"
+min_segment_s = 1.0           # shorter system-audio segments never create or move a speaker
+similarity_threshold = 0.4    # cosine to a speaker's centroid; higher = more new labels (D-020)
+# short_threshold = 0.4       # for shorter segments; unset = similarity_threshold.
+                              # Below it a short reply is shown as "Speaker ?"
 max_remote_speakers = 4       # safety cap against label explosion; brief requires >= 2
+threads = 2                   # onnxruntime threads for the speaker embedding
 
 [scenario]
 # Describes the test setup; written into reports. No code depends on these values.
