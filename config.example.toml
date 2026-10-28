@@ -5,6 +5,8 @@
 #     --set audio.system_device="Headset"   --set speakers.min_segment_s=1.5
 
 [audio]
+use_mic = true                # capture the microphone (lines labelled "Me")
+use_system = true             # capture system audio, i.e. the call (lines labelled "Remote" until Step 7)
 # Devices: "default", an index from --list, or part of the device name.
 mic_device = "default"        # Windows default WASAPI input
 system_device = "default"     # loopback of the Windows default output.

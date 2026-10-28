@@ -22,6 +22,7 @@ All settings and test assumptions are listed, with their defaults, in [config.ex
 
 | Section | Key | Default | Meaning |
 |---|---|---|---|
+| audio | `use_mic`, `use_system` | `true`, `true` | which sources to capture (`--no-mic`, `--no-system`) |
 | audio | `mic_device`, `system_device` | `default` | index, name substring or `default` |
 | audio | `fill_gaps`, `gap_threshold_ms` | `true`, 200 | loopback sends no data while nothing plays; gaps longer than this are filled with silence |
 | segmentation | `end_pause_ms`, `max_segment_s` | 1000, 8.0 | end-of-phrase pause; forced cut (placed at the quietest point of the last 1.5 s) |
@@ -85,16 +86,18 @@ No model weights are included in this repository. Each model is downloaded from 
 
 **Attribution:** Armenian speech recognition uses *stt_hy_fastconformer_hybrid_large_pc* by NVIDIA, licensed CC-BY-4.0, converted to ONNX by OpenVoiceOS. Only the runtime format was changed, not the weights. Licences of components added in later steps (voice activity detection, speaker embeddings) are listed here as they are added. This is not legal advice.
 
-## Running it (Step 5: microphone)
+## Running it (microphone + system audio)
 
 ```powershell
 python translate.py --list                         # capture devices
-python translate.py                                # Windows default microphone; Ctrl+C to stop
-python translate.py --mic "Intel" --set segmentation.end_pause_ms=800
-python translate.py --wav eval/audio/mic-01.wav    # play a recording through the same path
+python translate.py                                # default mic + loopback of the default output; Ctrl+C to stop
+python translate.py --mic "Intel" --system "Headset" --set segmentation.end_pause_ms=800
+python translate.py --no-system                    # microphone only (--no-mic: call only)
+python translate.py --wav eval/audio/mic-01.wav    # play a recording through the same path as the mic
+python translate.py --wav a.wav --wav-system b.wav # ... and another as the call
 ```
 
-Each phrase prints as `[time] Me: Armenian  →  English`. The Armenian shown is the text after the glossary and number fixes, i.e. what was translated. Every run writes `runs/<timestamp>/segments.jsonl` (texts and timings per segment) and `summary.json` (latency p50/p95/max). `runs/` is git-ignored because it contains transcripts.
+Each phrase prints as `[time] Me: Armenian  →  English` for the microphone and `[time] Remote: …` for system audio (Step 7 replaces `Remote` with `Speaker 1`, `Speaker 2`, …). Both sources share one inference worker, so phrases are translated one at a time in the order they end. **Use headphones:** with speakers the microphone also hears the call, and remote speech prints twice. The Armenian shown is the text after the glossary and number fixes, i.e. what was translated. Every run writes `runs/<timestamp>/segments.jsonl` (texts and timings per segment) and `summary.json` (latency p50/p95/max). `runs/` is git-ignored because it contains transcripts.
 
 Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/silero_vad.onnx` from [snakers4/silero-vad](https://github.com/snakers4/silero-vad) (MIT).
 

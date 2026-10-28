@@ -1,6 +1,6 @@
-"""Live pipeline: capture -> VAD segments -> ASR -> text fixes -> MT -> terminal (Step 5, D-016).
+"""Live pipeline: capture -> VAD segments -> ASR -> text fixes -> MT -> terminal (Steps 5-6, D-016, D-019).
 
-One reader loop per run pulls frames from each source and cuts segments; a single worker
+One reader loop per run drains frames from every source (mic, system) and cuts segments; a single worker
 thread runs ASR and MT in order, so the CPU is never shared by two inferences (D-010).
 Every segment is logged as one JSON line with its timings; latency is measured from the
 end of the last voiced chunk to the moment the line is printed (TESTS.md).
@@ -24,7 +24,7 @@ from .evalset import read_wav
 from .textfix import _ALPHA
 from .vad import Segment
 
-LABELS = {"mic": "Me"}
+LABELS = {"mic": "Me", "system": "Remote"}   # Step 7 splits "Remote" into Speaker 1, 2, ...
 
 
 class FileSource:
@@ -53,6 +53,7 @@ class FileSource:
         pass
 
     def read(self, timeout: float | None = None) -> AudioFrame | None:
+        """Next frame once it is due; None if it is not due within `timeout` (0 = don't wait)."""
         if self._pos >= len(self.samples):
             self.finished = True
             return None
@@ -60,6 +61,10 @@ class FileSource:
         if self.realtime:
             wait = t_frame + self._n / 16_000 - time.perf_counter()  # frame is "captured" at its end
             if wait > 0:
+                if timeout is not None and wait > timeout:
+                    if timeout > 0:
+                        time.sleep(timeout)
+                    return None
                 time.sleep(wait)
         chunk = self.samples[self._pos:self._pos + self._n]
         self._pos += self._n
@@ -161,8 +166,13 @@ def latency_summary(results: list[Result]) -> dict:
             "mt_max_s": max(r.mt_s for r in results), "queue_max_s": max(r.queue_s for r in results)}
 
 
-def run(sources: dict, segmenters: dict, worker: Worker, stop: threading.Event | None = None) -> None:
-    """Read all sources until `stop` is set (or every FileSource has finished)."""
+def run(sources: dict, segmenters: dict, worker: Worker, stop: threading.Event | None = None,
+        idle_s: float = 0.005) -> None:
+    """Read all sources until `stop` is set (or every FileSource has finished).
+
+    Each pass drains every frame a source has ready without waiting, so a quiet source never
+    holds up a busy one; the loop sleeps `idle_s` only when no source had anything.
+    """
     stop = stop or threading.Event()
     for s in sources.values():
         s.start()
@@ -171,13 +181,14 @@ def run(sources: dict, segmenters: dict, worker: Worker, stop: threading.Event |
         while not stop.is_set():
             got = False
             for name, src in sources.items():
-                frame = src.read(timeout=0.02)
-                if frame is not None:
+                while (frame := src.read(timeout=0)) is not None:
                     got = True
                     for seg in segmenters[name].push(frame):
                         worker.submit(seg)
-            if not got and all(getattr(s, "finished", False) for s in sources.values()):
-                break
+            if not got:
+                if all(getattr(s, "finished", False) for s in sources.values()):
+                    break
+                time.sleep(idle_s)
     except KeyboardInterrupt:
         pass
     finally:

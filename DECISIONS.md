@@ -348,3 +348,28 @@ Published model claims are labelled *reported* until they have been reproduced h
   - After the fixes only 3 texts change, all correctly (`Ամազո՞` → Amazon, `վերժան`/`վեժին քընթրոլ` → version control). Unit tests cover both false positives.
 - **Result on the live run:** 11 of 12 lines now right. Changed: "Hello, Sona.", "Git is used for version control.", "version control.", "What about Amazon?". Eval chrF unchanged at 65.2. 145 unit tests pass.
 - **Still weak:** fragments the ASR garbles (`Աեից։` → "I'm going to tell you.") are too long for the noise filter and still get invented translations. Terms the ASR mangles beyond these limits still need explicit glossary entries.
+
+## D-019 Second source: system audio (loopback) in the same pipeline (Step 6)
+- **Date:** 2026-10-27 · **Status:** verified by a two-source playback run, a live loopback run and a live call by the developer (2026-10-28, `runs/20261028-225057`).
+- **Change:** `translate.py` captures the microphone (`Me`) and the loopback of an output device (`Remote`) together, by default.
+  - Each source has its own Silero VAD and `Segmenter` (the VAD is stateful), and both feed the **one inference worker** (D-010). Segments are processed in the order they close, so the CPU never runs two inferences at once.
+  - `Remote` is a placeholder label. Step 7 splits it into `Speaker 1`, `Speaker 2`, … .
+  - **Settings:** `audio.use_mic` and `audio.use_system` (both `true`) in the config. On the command line: `--system DEVICE`, `--no-mic`, `--no-system`. `--wav-system` plays files as the call, next to `--wav` for the mic. `--seconds N` stops a run by itself, for scripted tests.
+  - `summary.json` adds latency per source (`by_source`).
+- **Reader loop fix:** the Step 5 loop read one frame per source and waited up to 20 ms on each. With two sources, a quiet source would hold up a busy one, and since each source produces a 20 ms frame every 20 ms, a backlog could build. The loop now takes every frame each source has ready without waiting, and sleeps 5 ms only when no source had anything. Playback sources return `None` when their next frame is not due yet, instead of sleeping.
+- **Two-source playback run** (8 eval clips as the mic and 7 as the call, played at the same time in real time, so they overlap; **laptop on battery**, 45%):
+  - 22 segments, 13 `Me` and 9 `Remote`, all with the right label.
+  - Latency p50 1.62 s, p95 2.20 s, max 2.84 s, nothing over 5 s. The single-source run on battery had p95 2.97 s (D-017).
+  - The longest wait for the worker was 0.70 s, once, when both sources closed a segment at almost the same time. Otherwise it was under 25 ms.
+  - Translations matched the single-source runs. The one garbled line (mic-07's continuation after a forced cut) was garbled the same way in Step 5 (D-016), so it is not caused by the second source.
+- **Live loopback run:** 5 eval clips played through the laptop speakers (Realtek) and captured from their loopback with `--no-mic`. All 7 phrases printed as `Remote` lines. Latency p50 1.49 s, p95 1.88 s, max 1.89 s.
+- **Live call** (developer, 2026-10-28; laptop mic + loopback of `Speaker (Realtek)`, one remote person, taking turns):
+  - 24 segments, 14 `Me` and 10 `Remote`, every label right and no phrase printed twice.
+  - Latency p50 1.55 s, p95 1.84 s, max 2.39 s, nothing over 5 s. Per source, p95 was 2.04 s for `Me` and 1.69 s for `Remote`. The longest wait for the worker was 0.21 s.
+  - **Accuracy problems (for later steps):**
+    - **Names:** `Սաթենիկ ջան` → "Satanic, what are you doing?" and "Mr. Sattenik"; `Սանաջան` → "Sana". The phrasebook only transliterates names after a greeting it knows (D-017).
+    - **Garbled ASR on unclear speech**, which NLLB turns into fluent but invented English (`Աես բարառերն են…` → "Those are the bastards, you know."; `Հորսկացադր ներ։` → "What is the meaning of this verse?").
+    - Short phrases mistranslated: `Լավ, դուք ինչ բացեք` → "All right, you guys open up."
+- **Not tested yet:**
+  - The mic and system audio live at the same time with **speakers**, the mic also hears the call, so remote speech would print twice (once as `Me`). Echo is out of scope (brief, D-011). **Use headphones**, or turn the speaker volume low.
+  - Sustained overlapping speech: the worker's queue would grow by one segment's ASR + MT time (≈ 1 s) per overlap. To be watched in Step 8.

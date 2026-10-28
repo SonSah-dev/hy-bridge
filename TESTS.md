@@ -87,3 +87,15 @@ Two remote Armenian speakers on separate devices, plus the developer on the mic.
 ## Configuration
 - [ ] Every D-010 setting can be overridden from the command line or a config file, and the README documents each one.
 - [ ] Devices can be selected by index and by name substring.
+
+## Step 6 — system audio added (D-019)
+Exit check: both sources print; settings come from config.
+1. **Two-source playback** *(automatic, done)*: `python translate.py --wav eval/audio/mic-{01,03,...}.wav --wav-system eval/audio/mic-{02,04,...}.wav --gap-s 2`. Result 2026-10-27 (on battery): 22 segments, every `Me`/`Remote` label right, latency p95 2.20 s, max 2.84 s, none over 5 s.
+2. **Live loopback** *(automatic, done)*: `python translate.py --no-mic --seconds 60` while eval clips play through the default output. Result 2026-10-27: 7 of 7 phrases printed as `Remote`; p95 1.88 s.
+3. **Settings from config** *(unit tests, done)*: `audio.use_mic` / `audio.use_system` load from TOML and `--set`; unknown keys are rejected.
+4. **Live call** *(manual)*: wear headphones and join a call (any app) with one other person. Run `python translate.py` (add `--system "<headset name>"` if the call plays through the headset; see `--list`). Take turns for about 2 minutes, then press Ctrl+C. Pass if:
+   - your speech prints as `Me` and theirs as `Remote`, with no line printed twice;
+   - `summary.json` shows no segment over 5 s, for either source (`by_source`);
+   - no errors appear and Ctrl+C exits cleanly.
+
+**Result: PASSED 2026-10-28** (`runs/20261028-225057`). 24 segments, 14 `Me` and 10 `Remote`, labels right, nothing printed twice; latency p95 1.84 s, max 2.39 s, none over 5 s. Names were mistranslated (`Սաթենիկ` → "Satanic"/"Sattenik"), and garbled ASR on unclear speech became invented English; both are left for later steps (D-019, PLAN.md backlog).
