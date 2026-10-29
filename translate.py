@@ -109,8 +109,14 @@ def main() -> int:
     run_dir = Path(args.runs) / datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
     log = open(run_dir / "segments.jsonl", "w", encoding="utf-8", newline="\n")
-    worker = Worker(asr.transcribe, translate, fixer, log=log, min_letters=cfg.text.min_letters,
-                    speakers=speakers)
+    from armtranslate.asr import is_unclear
+
+    def unclear(fixed: str, conf: dict) -> bool:          # an exact phrasebook phrase is trusted
+        return (is_unclear(conf, cfg.asr.unclear_mean_logprob, cfg.asr.unclear_low_share)
+                and (phrasebook is None or phrasebook.lookup(fixed) is None))
+
+    worker = Worker(asr.transcribe_scored, translate, fixer, log=log, min_letters=cfg.text.min_letters,
+                    speakers=speakers, unclear=unclear)
 
     p = None
     sources, inputs = {}, {}

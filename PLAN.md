@@ -33,7 +33,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
   - short phrases and greetings;
   - normal conversational speech from both the microphone and system audio.
 - **Names in translations** (live call, D-019) — **done 2026-10-29 (D-021):** `Սաթենիկ ջան` → "Satanic" / "Mr. Sattenik", `Սանաջան` → "Sana". Ideas: a names list (Armenian → Latin) applied before MT the way the glossary is, transliterating capitalised names that aren't in it, and dropping `ջան` before NLLB everywhere, not only in the phrasebook.
-- **Invented translations of garbled ASR** (D-017, D-019): unclear speech gives non-words that NLLB turns into fluent, wrong English. Idea: a confidence check (ASR score or share of unknown words) that shows the Armenian with `[unclear]` instead of a translation.
+- **Invented translations of garbled ASR** (D-017, D-019) — **done 2026-10-29 (D-022), catches the worst cases only:** unclear speech gives non-words that NLLB turns into fluent, wrong English. Idea: a confidence check (ASR score or share of unknown words) that shows the Armenian with `[unclear]` instead of a translation.
 
 - **MT repetition guard** (D-020): compare `no_repeat_ngram_size` 3/4 with off on the 15 eval clips only (a full 134-text sweep takes ~20 min on this CPU). The output-length cap already bounds the loop at ≈ 3.7 s. Step 8.
 - **Speaker change inside a phrase** (D-020): a handover with < 1 s pause merges two voices into one segment. Only if the live call shows it often.

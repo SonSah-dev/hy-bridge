@@ -87,3 +87,33 @@ def test_realtime_file_source_does_not_block_when_not_due(tmp_path):
     assert src.read(timeout=0) is None                 # first 20 ms frame is not captured yet
     assert src.read(timeout=0.05) is not None          # waits for it when allowed to
     assert not src.finished
+
+
+def test_unclear_segment_is_not_translated():
+    from armtranslate.asr import is_unclear
+    calls, out = [], io.StringIO()
+    w = Worker(lambda s: ("Տ գրված ծ ին բալ", {"mean_logprob": -0.48, "low_share": 0.29}),
+               lambda s: calls.append(s) or "invented", out=out,
+               unclear=lambda text, conf: is_unclear(conf, -0.3, 0.15))
+    r = w.process(Segment("mic", 0, 0, 0, np.zeros(16_000, np.float32)))
+    assert r.en == "[unclear]" and r.unclear and calls == []
+    assert "Me: Տ գրված ծ ին բալ  →  [unclear]" in out.getvalue()
+    assert r.asr_conf == {"mean_logprob": -0.48, "low_share": 0.29}
+    assert latency_summary(w.results)["unclear"] == 1
+
+
+def test_confident_segment_is_translated():
+    from armtranslate.asr import is_unclear
+    w = Worker(lambda s: ("Ես Լուսինեն եմ։", {"mean_logprob": -0.04, "low_share": 0.0}),
+               lambda s: "My name is Lusine.", out=io.StringIO(),
+               unclear=lambda text, conf: is_unclear(conf, -0.3, 0.15))
+    r = w.process(Segment("mic", 0, 0, 0, np.zeros(16_000, np.float32)))
+    assert r.en == "My name is Lusine." and not r.unclear
+
+
+def test_is_unclear_thresholds():
+    from armtranslate.asr import is_unclear
+    assert is_unclear({"mean_logprob": -0.31, "low_share": 0.0}, -0.3, 0.15)
+    assert is_unclear({"mean_logprob": -0.1, "low_share": 0.15}, -0.3, 0.15)
+    assert not is_unclear({"mean_logprob": -0.29, "low_share": 0.14}, -0.3, 0.15)
+    assert not is_unclear({"mean_logprob": -0.9, "low_share": 0.9}, None, None)   # switched off

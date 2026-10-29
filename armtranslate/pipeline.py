@@ -25,6 +25,7 @@ from .evalset import read_wav
 from .textfix import _ALPHA
 from .vad import Segment
 
+UNCLEAR = "[unclear]"
 LABELS = {"mic": "Me", "system": "Remote"}   # "Remote" only when speaker labels are off (D-020)
 
 
@@ -119,6 +120,8 @@ class Result:
     t_print: float
     spk_s: float = 0.0       # speaker embedding + assignment (system audio only)
     speaker: dict | None = None   # similarities to each remote speaker and the decision (D-020)
+    asr_conf: dict | None = None  # mean token log-prob and share of unsure tokens (D-022)
+    unclear: bool = False         # shown as "[unclear]", not translated (D-022)
 
     def line(self) -> str:
         clock = datetime.fromtimestamp(self.t_start).strftime("%H:%M:%S")
@@ -127,7 +130,7 @@ class Result:
 
 @dataclass
 class Worker:
-    transcribe: Callable[[np.ndarray], str]
+    transcribe: Callable[[np.ndarray], str | tuple[str, dict]]   # text, or (text, confidence)
     translate: Callable[[str], str]
     fix: Callable[[str], str] = lambda s: s
     out: TextIO = sys.stdout
@@ -135,6 +138,7 @@ class Worker:
     clock: Callable[[], float] = time.time
     min_letters: int = 2                    # fewer Armenian letters: noise, not shown (D-017)
     speakers: Callable[[np.ndarray], tuple[str, dict]] | None = None  # system audio labels (D-020)
+    unclear: Callable[[str, dict], bool] | None = None   # (fixed text, confidence) -> garbled? (D-022)
     results: list[Result] = field(default_factory=list)
     skipped: int = 0
 
@@ -156,7 +160,9 @@ class Worker:
     def process(self, seg: Segment) -> Result | None:
         t_dequeue = self.clock()
         t = time.perf_counter()
-        hy = self.transcribe(seg.samples).strip()
+        out = self.transcribe(seg.samples)
+        hy, conf = (out if isinstance(out, tuple) else (out, None))
+        hy = hy.strip()
         asr_s = time.perf_counter() - t
         if sum(ch in _ALPHA for ch in hy) < self.min_letters:
             self.skipped += 1
@@ -167,14 +173,15 @@ class Worker:
             label, speaker = self.speakers(seg.samples)
             spk_s = time.perf_counter() - t
         fixed = self.fix(hy)
+        unclear = conf is not None and self.unclear is not None and self.unclear(fixed, conf)
         t = time.perf_counter()
-        en = self.translate(fixed)
+        en = UNCLEAR if unclear else self.translate(fixed)
         mt_s = time.perf_counter() - t
         t_print = self.clock()
         r = Result(seg.source, label, seg.t_start, round(seg.duration_s, 2),
                    seg.forced, hy, fixed, en, round(asr_s, 3), round(mt_s, 3),
                    round(max(0.0, t_dequeue - seg.t_emit), 3), round(t_print - seg.t_last_voice, 3), t_print,
-                   round(spk_s, 3), speaker)
+                   round(spk_s, 3), speaker, conf, unclear)
         print(r.line(), file=self.out, flush=True)
         if self.log is not None:
             self.log.write(json.dumps(r.__dict__, ensure_ascii=False) + "\n")
@@ -201,7 +208,7 @@ def latency_summary(results: list[Result]) -> dict:
             "latency_p95_s": round(float(np.percentile(lat, 95)), 2), "latency_max_s": round(float(lat.max()), 2),
             "over_5s": int((lat > 5.0).sum()), "asr_max_s": max(r.asr_s for r in results),
             "mt_max_s": max(r.mt_s for r in results), "spk_max_s": max(r.spk_s for r in results),
-            "queue_max_s": max(r.queue_s for r in results)}
+            "queue_max_s": max(r.queue_s for r in results), "unclear": sum(r.unclear for r in results)}
 
 
 def run(sources: dict, segmenters: dict, worker: Worker, stop: threading.Event | None = None,

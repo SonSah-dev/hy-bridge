@@ -105,6 +105,8 @@ Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/sil
 
 **Glossary:** add the names and English terms you expect in the interview to [glossary.tsv](glossary.tsv), written the way the ASR spells them in Armenian letters (check the Armenian part of the printed lines). This is the main fix for terms that would otherwise be mistranslated.
 
+**Unclear speech:** when the speech recogniser is unsure (low mean token probability, or many unsure tokens), the line shows the Armenian with `[unclear]` instead of a translation, because the translation model turns garbled text into fluent but invented English. Settings `asr.unclear_mean_logprob` (−0.3) and `asr.unclear_low_share` (0.15); set either to `none` to switch it off. It catches the worst cases, not all of them (D-022).
+
 **Names:** add the names of everyone in the interview, and places you expect, to [names.tsv](names.tsv) with their Latin spelling (`Սաթենիկ` → `Satenik`). The translation model keeps Latin names but turns many Armenian-letter names into words ("Satan", "Lune"). Endings are kept (`Satenik-ի`), and `ջան` after a name is dropped. Names of 6+ letters also match one-letter misspellings; for shorter ones, add the variants the ASR produces as extra lines (D-021).
 
 **Phrasebook:** short replies (1–3 words) are looked up in [phrasebook.tsv](phrasebook.tsv) before translation, because the translation model often invents sentences for very short inputs. A greeting followed by a name keeps the name in Latin letters (`Ողջույն Սոնա ջան` → "Hello, Sona."). Add the short replies you expect.

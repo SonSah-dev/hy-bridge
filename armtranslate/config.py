@@ -42,6 +42,8 @@ class SegmentationConfig:
 @dataclass(frozen=True)
 class AsrConfig:
     threads: int = 2                       # onnxruntime intra-op threads; 2 beat the default (D-013)
+    unclear_mean_logprob: float | None = -0.3   # mean token log-prob below this: "[unclear]" (D-022)
+    unclear_low_share: float | None = 0.15      # or this share of tokens under p=0.5; None = off
 
 
 @dataclass(frozen=True)

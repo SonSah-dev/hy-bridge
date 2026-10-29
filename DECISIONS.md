@@ -425,3 +425,18 @@ Published model claims are labelled *reported* until they have been reproduced h
   - **Worse (1):** a garbled post-call segment (`Աքատամ շատ լավ Սոն ա ջան գրիլա Սոնա Ան…`) went from "Sonja, sonja, …" to a crude English sentence. Garbage in either case; the `[unclear]` check (PLAN.md backlog) is meant for such text.
 - **Flattered:** `Անահիտ`, `Ադամյան`, `Վանաձոր` come from eval clip mic-01, and the others from the logged calls, as with the glossary (D-016). The real test is the interview's names, which the user adds beforehand.
 - 170 unit tests pass.
+
+## D-022 `[unclear]` instead of invented English for garbled recognition (Step 8, quality)
+- **Date:** 2026-10-29 · **Status:** verified offline on 131 recorded segments; not yet on a live call.
+- **Problem (D-017, D-019, D-020):** unclear speech gives non-words, and NLLB turns them into fluent but invented English (`Տ գրված ծ ին բալ ծրագիր…` → "It's written in a blueprint."; `Աես բարառերն են…` → "Those are the bastards, you know.").
+- **Signal:** the FastConformer CTC head gives a log-probability per output token through onnx-asr's `with_timestamps()` adapter, in the same pass: **no extra cost** (8 s segment: 0.069 s plain, 0.068 s scored). Per segment: the **mean token log-probability** and the **share of tokens with probability < 0.5**. Both are logged in `segments.jsonl` (`asr_conf`).
+- **Data:** every recorded run re-segmented with the live VAD settings: the test call (`20261029-202643`, mic and system: clear call speech plus garbled after-call chat), the English sample played as the call (`20261028-230813`, all garbled), and eval-clip playback (`20261027-191427`, `-221739`, clean). 114 unique texts.
+  - Clear sentences: mean −0.00 to −0.10, low share 0. Clearly garbled: mean −0.3 to −0.94 and/or low share ≥ 0.15. Between −0.3 and −0.15, garbled chat and correct short words (`Ցտեսություն։` −0.20, `Շնորհակալություն։` −0.21) overlap.
+- **Rule:** `[unclear]` if mean < **−0.3** or low share ≥ **0.15**, unless the fixed text is an exact phrasebook phrase (D-017; a known phrase is trusted). The line shows the Armenian and `[unclear]`; MT is skipped. Settings `asr.unclear_mean_logprob`, `asr.unclear_low_share` (`none` = off). `summary.json` counts `unclear`.
+- **Replay result:** 12 of 114 flagged.
+  - **10 clearly garbled:** two forced-cut fragments of eval clip mic-07 (−0.94, −0.87), `Ապրումեք սածան`, `Տ գրված ծ ին բալ…`, three English-sample lines, `Քեզ հետ լվում`, `Լա`, `Աասա, Լուսինեն էլ ավտոմատ տառաս…`.
+  - **2 borderline (after-call chat):** `Ձայնս հաճաճելի ա, հաո, իրոք էնքան հաճելի…` was mostly understandable and NLLB had translated it reasonably: a **false positive**. `Ս տեսամեցնում, Շան, …` is half garbled.
+  - **No correct eval or call sentence was flagged.**
+  - **Missed:** garbled lines with confident-looking tokens: `Պարոն Նջելինը` (English sample, −0.18), `Սաթեն՞ք`, and most of the after-call chat, including the line that became a crude sentence in D-021 (−0.18). So this removes the worst invented translations, not all.
+- **Caveat:** thresholds chosen on these same segments, without a held-out set; the challenge-specific eval set (PLAN.md backlog) would give one.
+- 173 unit tests pass.
