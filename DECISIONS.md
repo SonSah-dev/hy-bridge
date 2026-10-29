@@ -373,3 +373,37 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Not tested yet:**
   - The mic and system audio live at the same time with **speakers**, the mic also hears the call, so remote speech would print twice (once as `Me`). Echo is out of scope (brief, D-011). **Use headphones**, or turn the speaker volume low.
   - Sustained overlapping speech: the worker's queue would grow by one segment's ASR + MT time (≈ 1 s) per overlap. To be watched in Step 8.
+
+## D-020 Remote speaker labels: WeSpeaker ResNet34-LM + online clustering (Step 7)
+- **Date:** 2026-10-28 · **Status:** implemented and checked offline; **the live test call (TESTS.md §Speakers, S1–S5) is still pending.** The threshold is an offline estimate until then.
+- **Model:** `Wespeaker/wespeaker-voxceleb-resnet34-LM` (`voxceleb_resnet34_LM.onnx`, 26.5 MB, 256-dim embeddings). Licence CC-BY-4.0 on its Hugging Face card, which settles D-005's conflicting information for this variant. Run with onnxruntime, 2 threads.
+- **Features without torch:** Kaldi 80-bin log-mel fbank (25/10 ms, Hamming, no dither, input scaled to the int16 range, mean-normalised over time) written in numpy (`armtranslate/speakers.py`). Checked against `kaldi-native-fbank` 1.22.4 on mic-01: max difference 0.0006 (mean |value| 4.7). `kaldi-native-fbank` is not a dependency.
+- **Clustering (`SpeakerTracker`):** microphone segments stay `Me` (D-004). Each system-audio segment that passes the noise filter (D-017) is embedded and compared by cosine with each remote speaker's centroid (running sum of embeddings).
+  - ≥ `min_segment_s` (1.0 s): joins the best speaker if similarity ≥ `similarity_threshold`, and updates its centroid; else becomes a new `Speaker N`; at `max_remote_speakers` (4) the nearest speaker is used (`cap`, logged).
+  - Shorter: borrows the best speaker's label if similarity ≥ `short_threshold` (default: the same as `similarity_threshold`), else `Speaker ?`. It never creates or moves a speaker.
+  - Centroids never expire, so a speaker keeps their label after any silence (S2).
+  - Each segment's similarities and decision are logged in `segments.jsonl` (`speaker`); `summary.json` adds a `speakers` block. `--no-speakers` / `speakers.enabled=false` returns to `Remote`.
+- **Offline data (`eval/bench_speakers.py`):** the developer's 15 mic clips (Armenian) and pyannote's MIT-licensed two-speaker sample (`tutorials/assets/sample.wav` + `.rttm`, English, 30 s; overlapped parts removed; saved git-ignored in `eval/audio/external/`). No Armenian call audio with two remote speakers exists yet. "Narrowband" resamples to 8 kHz and back, a rough stand-in for a poor codec.
+
+| | same speaker, ≥ 1.5 s: p5 / median | different speakers, ≥ 1.5 s: median / max | best pairwise split |
+|---|---|---|---|
+| wideband | 0.34 / 0.63 | 0.05 / 0.42 | 0.34 (6% error) |
+| narrowband 8 kHz | 0.27 / 0.64 | 0.22 / 0.46 | 0.36 (9% error) |
+
+  - Online clustering, segments ≥ 1 s: at threshold **0.3–0.4 every segment is labelled right** (two voices in real turn order 6/6; three voices interleaved 21/21), wideband and narrowband. 0.5–0.6 makes one spurious label; 0.7 makes 4.
+  - **Decision: `similarity_threshold` = 0.4**, the high end of the clean range: centroid matching beats pairwise similarity, and an extra label is a smaller error than merging two people.
+  - Short segments (< 1 s): 0 of 3 right; two came before any speaker existed, and one was nearer the wrong speaker (0.26). Short replies are shown as `Speaker ?` rather than lowering their threshold on 3 samples. **Known weak case (S3).**
+  - Embedding time: median 0.21 s, up to 0.45 s for an 8 s segment (0.62 s for an 18 s clip). It runs in the single worker (D-010) and adds to system-audio latency only.
+- **Caveats:** tiny data (3 voices, 24 segments); the developer's clips and the pyannote sample come from different microphones, which makes them easier to tell apart than two people on one call app. The live call decides.
+- **Found in the two-source playback run** (`runs/20261028-230813`, pyannote sample as the call):
+  - **Turns without a pause are merged.** In the sample the speakers answer with no gap, so VAD segments (forced 8 s cuts) contain both voices, and all 8 segments became `Speaker 1`. Labels can only be as fine as segments: the next speaker must leave about `end_pause_ms` (1 s). Splitting a segment at a speaker change is not implemented (PLAN.md backlog).
+  - **MT loop: 13.8 s for one segment.** Garbled ASR text (English speech) made NLLB repeat "well, well, …" up to its 256-token limit; with the segments queued behind it, 2 segments went over 5 s. **Fix:** output capped at 2 × input tokens + 10 (`armtranslate/mt.py`). Over all 134 logged and eval texts, real translations used at most 2.0× (only 1–3 piece inputs reach it); the loop used 7.3×. The capped loop still takes ≈ 3.7 s and stays garbage. A repetition guard is left for Step 8 (PLAN.md backlog).
+- **Recording:** `--record` saves the live audio (`input-mic.wav`, `input-system.wav`) in the run folder, so the test call can be replayed with `--wav-system` to re-tune the threshold. Recordings stay in the git-ignored `runs/`.
+- **Live test call, 2026-10-29** (`runs/20261029-202643`, `--record`; laptop mic + `Speaker (Realtek)` loopback; two remote people on separate devices, about 3.5 min; developer confirmed who said what):
+  - Latency p50 1.63 s, p95 2.48 s, max 2.73 s, nothing over 5 s (76 lines). Speaker step at most 0.22 s. S4 passed: all mic lines `Me`, nothing printed twice.
+  - **Labels with threshold 0.4: 4 for 2 people.** Person B's first three replies (1.4 s, 2.4 s, 2.8 s) each started a new speaker (`Speaker 2`, `3`, `4`; best similarities 0.19, 0.25, 0.38). After that, both people kept one label to the end.
+  - **Call audio scores lower than the offline data:** same-person median 0.47 (A) and **0.36** (B); different people median 0.18, **max 0.40**. 0.4 sat on the overlap.
+  - **Change:** `similarity_threshold` 0.4 → **0.35**, and a new setting **`new_speaker_min_s` = 2.0**: segments between `min_segment_s` and 2 s may join a known speaker (and update it) but never start one; unmatched they show `Speaker ?` (decision `unknown`).
+  - **Replaying the recorded call** (same VAD segments, 28 of 28 matched to the live log) with the new defaults: **2 labels, 26/28 right**; the 2 others are `Speaker ?`, each person's first reply before anyone was known. Sweep: thresholds 0.3–0.35 with a 2 s minimum gave 26/28; 0.4 with 2 s gave 3 labels; a 3 s minimum labelled many lines `Speaker ?`.
+  - **Caveat:** tuned and checked on the same 28 segments, so not held out. S2 (60 s silence), S3 (short replies) and a 10-minute S5 were not run. A second call is needed.
+  - The offline numbers above were measured before `new_speaker_min_s` existed.

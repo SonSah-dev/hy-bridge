@@ -13,6 +13,9 @@ MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 SOURCES = {"opus": "Helsinki-NLP/opus-mt-hy-en", "nllb": "facebook/nllb-200-distilled-600M"}
 DIRS = {"opus": "opus-mt-hy-en-ct2-{q}", "nllb": "nllb-600m-ct2-{q}"}
 NLLB_SRC, NLLB_TGT = "hye_Armn", "eng_Latn"
+# Output length cap: 2 x input tokens + 10. Real translations stayed within 2 x (134 logged texts);
+# a garbled segment made NLLB loop ("well, well, ...") to 242 tokens and 13.8 s (D-020).
+MAX_OUT_RATIO, MAX_OUT_EXTRA = 2, 10
 
 
 def model_dir(family: str, compute: str) -> Path:
@@ -47,12 +50,13 @@ class Translator:
             return ""
         beam = beam_size or self.beam_size
         pieces = self._src.encode(text, out_type=str)
+        limit = min(256, MAX_OUT_RATIO * len(pieces) + MAX_OUT_EXTRA)
         if self.family == "nllb":
             out = self._tr.translate_batch([[NLLB_SRC] + pieces + ["</s>"]], target_prefix=[[NLLB_TGT]],
-                                           beam_size=beam, max_decoding_length=256)
+                                           beam_size=beam, max_decoding_length=limit)
             tokens = [t for t in out[0].hypotheses[0] if t != NLLB_TGT]
         else:
-            out = self._tr.translate_batch([pieces + ["</s>"]], beam_size=beam, max_decoding_length=256)
+            out = self._tr.translate_batch([pieces + ["</s>"]], beam_size=beam, max_decoding_length=limit)
             tokens = out[0].hypotheses[0]
         return self._tgt.decode(tokens).strip()
 

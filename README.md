@@ -32,7 +32,7 @@ All settings and test assumptions are listed, with their defaults, in [config.ex
 | text | `glossary`, `numbers_to_digits` | glossary.tsv, true | fixes applied to the Armenian text before translation (D-016) |
 | text | `phrasebook`, `min_letters` | phrasebook.tsv, 2 | short replies translated directly; shorter noise segments hidden (D-017) |
 | mt | `short_beam_size` | 4 | beam for 1–3 word segments not in the phrasebook (D-017) |
-| speakers | `min_segment_s`, `similarity_threshold`, `max_remote_speakers` | 1.0, unset, 4 | speaker assignment |
+| speakers | `enabled`, `min_segment_s`, `new_speaker_min_s`, `similarity_threshold`, `short_threshold`, `max_remote_speakers`, `threads` | true, 1.0, 2.0, 0.35, unset (= `similarity_threshold`), 4, 2 | remote speaker labels (D-020) |
 | scenario | `remote_participants`, `separate_devices`, `turn_taking`, `call_app`, `output_setup` | 2, true, true, unspecified, unspecified | describes the test; recorded in reports only |
 
 Unit tests (no audio hardware needed): `pip install -r requirements-dev.txt; python -m pytest tests`.
@@ -84,7 +84,7 @@ No model weights are included in this repository. Each model is downloaded from 
 | sentencepiece | tokenisation | Apache-2.0 |
 | [Silero VAD](https://github.com/snakers4/silero-vad) | voice activity detection | MIT |
 
-**Attribution:** Armenian speech recognition uses *stt_hy_fastconformer_hybrid_large_pc* by NVIDIA, licensed CC-BY-4.0, converted to ONNX by OpenVoiceOS. Only the runtime format was changed, not the weights. Licences of components added in later steps (voice activity detection, speaker embeddings) are listed here as they are added. This is not legal advice.
+**Attribution:** Armenian speech recognition uses *stt_hy_fastconformer_hybrid_large_pc* by NVIDIA, licensed CC-BY-4.0, converted to ONNX by OpenVoiceOS. Only the runtime format was changed, not the weights. Speaker labels use the *wespeaker-voxceleb-resnet34-LM* model by WeSpeaker, licensed CC-BY-4.0 (Hugging Face `Wespeaker/wespeaker-voxceleb-resnet34-LM`), unchanged. Voice activity detection uses Silero VAD (MIT). This is not legal advice.
 
 ## Running it (microphone + system audio)
 
@@ -95,11 +95,13 @@ python translate.py --mic "Intel" --system "Headset" --set segmentation.end_paus
 python translate.py --no-system                    # microphone only (--no-mic: call only)
 python translate.py --wav eval/audio/mic-01.wav    # play a recording through the same path as the mic
 python translate.py --wav a.wav --wav-system b.wav # ... and another as the call
+python translate.py --record                       # also save the live audio, to replay it later
+python translate.py --no-speakers                  # label all call audio "Remote"
 ```
 
-Each phrase prints as `[time] Me: Armenian  →  English` for the microphone and `[time] Remote: …` for system audio (Step 7 replaces `Remote` with `Speaker 1`, `Speaker 2`, …). Both sources share one inference worker, so phrases are translated one at a time in the order they end. **Use headphones:** with speakers the microphone also hears the call, and remote speech prints twice. The Armenian shown is the text after the glossary and number fixes, i.e. what was translated. Every run writes `runs/<timestamp>/segments.jsonl` (texts and timings per segment) and `summary.json` (latency p50/p95/max). `runs/` is git-ignored because it contains transcripts.
+Each phrase prints as `[time] Me: Armenian  →  English` for the microphone and `[time] Speaker 1: …`, `Speaker 2`, … for system audio. Remote voices are told apart by a voice embedding compared with each speaker heard so far (D-020). Phrases under `speakers.new_speaker_min_s` (2 s) never start a new speaker; if they don't clearly match a known one they show as `Speaker ?`, which is common for each person's very first short reply. Turns need a pause of about `segmentation.end_pause_ms` (1 s) between people: if the next person starts sooner, both land in one phrase under one label. Both sources share one inference worker, so phrases are translated one at a time in the order they end. **Use headphones:** with speakers the microphone also hears the call, and remote speech prints twice. The Armenian shown is the text after the glossary and number fixes, i.e. what was translated. Every run writes `runs/<timestamp>/segments.jsonl` (texts and timings per segment) and `summary.json` (latency p50/p95/max). `runs/` is git-ignored because it contains transcripts.
 
-Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/silero_vad.onnx` from [snakers4/silero-vad](https://github.com/snakers4/silero-vad) (MIT).
+Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/silero_vad.onnx` from [snakers4/silero-vad](https://github.com/snakers4/silero-vad) (MIT), and the speaker model, fetched with `python eval/bench_speakers.py --download` into `models/wespeaker-resnet34-LM/`.
 
 **Glossary:** add the names and English terms you expect in the interview to [glossary.tsv](glossary.tsv), written the way the ASR spells them in Armenian letters (check the Armenian part of the printed lines). This is the main fix for terms that would otherwise be mistranslated.
 

@@ -1,7 +1,8 @@
-"""Live pipeline: capture -> VAD segments -> ASR -> text fixes -> MT -> terminal (Steps 5-6, D-016, D-019).
+"""Live pipeline: capture -> VAD segments -> ASR -> speaker -> text fixes -> MT -> terminal (Steps 5-7).
 
 One reader loop per run drains frames from every source (mic, system) and cuts segments; a single worker
-thread runs ASR and MT in order, so the CPU is never shared by two inferences (D-010).
+thread runs ASR, the speaker embedding (system audio only, D-020) and MT in order, so the CPU is
+never shared by two inferences (D-010).
 Every segment is logged as one JSON line with its timings; latency is measured from the
 end of the last voiced chunk to the moment the line is printed (TESTS.md).
 """
@@ -24,7 +25,7 @@ from .evalset import read_wav
 from .textfix import _ALPHA
 from .vad import Segment
 
-LABELS = {"mic": "Me", "system": "Remote"}   # Step 7 splits "Remote" into Speaker 1, 2, ...
+LABELS = {"mic": "Me", "system": "Remote"}   # "Remote" only when speaker labels are off (D-020)
 
 
 class FileSource:
@@ -74,6 +75,33 @@ class FileSource:
         return {"file_s": round(len(self.samples) / 16_000, 2)}
 
 
+class RecordingSource:
+    """Wraps a source and saves everything it delivers to a WAV when stopped (`--record`).
+
+    Live runs can then be replayed with `--wav` / `--wav-system` to tune settings offline.
+    """
+
+    def __init__(self, src, path: str | Path):
+        self.src, self.path, self._parts = src, Path(path), []
+
+    def __getattr__(self, name):
+        return getattr(self.src, name)
+
+    def start(self) -> None:
+        self.src.start()
+
+    def read(self, timeout: float | None = None) -> AudioFrame | None:
+        frame = self.src.read(timeout=timeout)
+        if frame is not None:
+            self._parts.append(frame.samples)
+        return frame
+
+    def stop(self) -> None:
+        self.src.stop()
+        from .evalset import write_wav
+        write_wav(self.path, np.concatenate(self._parts) if self._parts else np.zeros(0, np.float32))
+
+
 @dataclass
 class Result:
     source: str
@@ -89,6 +117,8 @@ class Result:
     queue_s: float           # waiting for the worker after the segment closed
     latency_s: float         # last voiced audio -> printed line
     t_print: float
+    spk_s: float = 0.0       # speaker embedding + assignment (system audio only)
+    speaker: dict | None = None   # similarities to each remote speaker and the decision (D-020)
 
     def line(self) -> str:
         clock = datetime.fromtimestamp(self.t_start).strftime("%H:%M:%S")
@@ -104,6 +134,7 @@ class Worker:
     log: TextIO | None = None
     clock: Callable[[], float] = time.time
     min_letters: int = 2                    # fewer Armenian letters: noise, not shown (D-017)
+    speakers: Callable[[np.ndarray], tuple[str, dict]] | None = None  # system audio labels (D-020)
     results: list[Result] = field(default_factory=list)
     skipped: int = 0
 
@@ -130,14 +161,20 @@ class Worker:
         if sum(ch in _ALPHA for ch in hy) < self.min_letters:
             self.skipped += 1
             return None
+        label, speaker, spk_s = LABELS.get(seg.source, seg.source), None, 0.0
+        if seg.source == "system" and self.speakers is not None:   # after the noise check: noise
+            t = time.perf_counter()                                 # must not create a speaker
+            label, speaker = self.speakers(seg.samples)
+            spk_s = time.perf_counter() - t
         fixed = self.fix(hy)
         t = time.perf_counter()
         en = self.translate(fixed)
         mt_s = time.perf_counter() - t
         t_print = self.clock()
-        r = Result(seg.source, LABELS.get(seg.source, seg.source), seg.t_start, round(seg.duration_s, 2),
+        r = Result(seg.source, label, seg.t_start, round(seg.duration_s, 2),
                    seg.forced, hy, fixed, en, round(asr_s, 3), round(mt_s, 3),
-                   round(max(0.0, t_dequeue - seg.t_emit), 3), round(t_print - seg.t_last_voice, 3), t_print)
+                   round(max(0.0, t_dequeue - seg.t_emit), 3), round(t_print - seg.t_last_voice, 3), t_print,
+                   round(spk_s, 3), speaker)
         print(r.line(), file=self.out, flush=True)
         if self.log is not None:
             self.log.write(json.dumps(r.__dict__, ensure_ascii=False) + "\n")
@@ -163,7 +200,8 @@ def latency_summary(results: list[Result]) -> dict:
     return {"segments": len(results), "latency_p50_s": round(float(np.percentile(lat, 50)), 2),
             "latency_p95_s": round(float(np.percentile(lat, 95)), 2), "latency_max_s": round(float(lat.max()), 2),
             "over_5s": int((lat > 5.0).sum()), "asr_max_s": max(r.asr_s for r in results),
-            "mt_max_s": max(r.mt_s for r in results), "queue_max_s": max(r.queue_s for r in results)}
+            "mt_max_s": max(r.mt_s for r in results), "spk_max_s": max(r.spk_s for r in results),
+            "queue_max_s": max(r.queue_s for r in results)}
 
 
 def run(sources: dict, segmenters: dict, worker: Worker, stop: threading.Event | None = None,
