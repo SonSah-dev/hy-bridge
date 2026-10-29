@@ -117,3 +117,30 @@ def test_is_unclear_thresholds():
     assert is_unclear({"mean_logprob": -0.1, "low_share": 0.15}, -0.3, 0.15)
     assert not is_unclear({"mean_logprob": -0.29, "low_share": 0.14}, -0.3, 0.15)
     assert not is_unclear({"mean_logprob": -0.9, "low_share": 0.9}, None, None)   # switched off
+
+
+def test_looping_translation_becomes_unclear():
+    from armtranslate.mt import is_degenerate
+    w = Worker(lambda s: ("Ի ջան, հը լավ գո", {"mean_logprob": -0.21, "low_share": 0.06}),
+               lambda s: "Oh, yeah, yeah, yeah, yeah, yeah.", out=io.StringIO(),
+               unclear=lambda text, conf: False, degenerate=is_degenerate)
+    r = w.process(Segment("mic", 0, 0, 0, np.zeros(16_000, np.float32)))
+    assert (r.en, r.unclear, r.unclear_reason) == ("[unclear]", True, "mt-repeat")
+
+
+def test_asr_unclear_keeps_its_reason_and_skips_mt():
+    from armtranslate.mt import is_degenerate
+    calls = []
+    w = Worker(lambda s: ("Տ գրված", {"mean_logprob": -0.48, "low_share": 0.29}),
+               lambda s: calls.append(s) or "x", out=io.StringIO(),
+               unclear=lambda text, conf: True, degenerate=is_degenerate)
+    r = w.process(Segment("mic", 0, 0, 0, np.zeros(16_000, np.float32)))
+    assert (r.en, r.unclear_reason, calls) == ("[unclear]", "asr", [])
+
+
+def test_valid_repetition_is_printed():
+    from armtranslate.mt import is_degenerate
+    w = Worker(lambda s: "Այո, այո, այո, հասկացա։", lambda s: "Yes, yes, yes, I got it.", out=io.StringIO(),
+               degenerate=is_degenerate)
+    r = w.process(Segment("mic", 0, 0, 0, np.zeros(16_000, np.float32)))
+    assert r.en == "Yes, yes, yes, I got it." and not r.unclear

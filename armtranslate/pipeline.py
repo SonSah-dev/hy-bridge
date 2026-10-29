@@ -121,7 +121,8 @@ class Result:
     spk_s: float = 0.0       # speaker embedding + assignment (system audio only)
     speaker: dict | None = None   # similarities to each remote speaker and the decision (D-020)
     asr_conf: dict | None = None  # mean token log-prob and share of unsure tokens (D-022)
-    unclear: bool = False         # shown as "[unclear]", not translated (D-022)
+    unclear: bool = False         # shown as "[unclear]" instead of a translation (D-022, D-023)
+    unclear_reason: str | None = None   # "asr": unsure recognition; "mt-repeat": MT looped
 
     def line(self) -> str:
         clock = datetime.fromtimestamp(self.t_start).strftime("%H:%M:%S")
@@ -139,6 +140,7 @@ class Worker:
     min_letters: int = 2                    # fewer Armenian letters: noise, not shown (D-017)
     speakers: Callable[[np.ndarray], tuple[str, dict]] | None = None  # system audio labels (D-020)
     unclear: Callable[[str, dict], bool] | None = None   # (fixed text, confidence) -> garbled? (D-022)
+    degenerate: Callable[[str, str], bool] | None = None  # (fixed text, English) -> MT looped? (D-023)
     results: list[Result] = field(default_factory=list)
     skipped: int = 0
 
@@ -177,11 +179,14 @@ class Worker:
         t = time.perf_counter()
         en = UNCLEAR if unclear else self.translate(fixed)
         mt_s = time.perf_counter() - t
+        reason = "asr" if unclear else None
+        if not unclear and self.degenerate is not None and self.degenerate(fixed, en):
+            en, unclear, reason = UNCLEAR, True, "mt-repeat"
         t_print = self.clock()
         r = Result(seg.source, label, seg.t_start, round(seg.duration_s, 2),
                    seg.forced, hy, fixed, en, round(asr_s, 3), round(mt_s, 3),
                    round(max(0.0, t_dequeue - seg.t_emit), 3), round(t_print - seg.t_last_voice, 3), t_print,
-                   round(spk_s, 3), speaker, conf, unclear)
+                   round(spk_s, 3), speaker, conf, unclear, reason)
         print(r.line(), file=self.out, flush=True)
         if self.log is not None:
             self.log.write(json.dumps(r.__dict__, ensure_ascii=False) + "\n")

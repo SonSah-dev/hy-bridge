@@ -115,8 +115,12 @@ def main() -> int:
         return (is_unclear(conf, cfg.asr.unclear_mean_logprob, cfg.asr.unclear_low_share)
                 and (phrasebook is None or phrasebook.lookup(fixed) is None))
 
+    from armtranslate.mt import is_degenerate
+    degenerate = None
+    if cfg.mt.repeat_min_run is not None:
+        degenerate = lambda src, en: is_degenerate(src, en, cfg.mt.repeat_min_run)  # noqa: E731
     worker = Worker(asr.transcribe_scored, translate, fixer, log=log, min_letters=cfg.text.min_letters,
-                    speakers=speakers, unclear=unclear)
+                    speakers=speakers, unclear=unclear, degenerate=degenerate)
 
     p = None
     sources, inputs = {}, {}

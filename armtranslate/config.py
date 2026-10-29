@@ -53,6 +53,8 @@ class MtConfig:
     beam_size: int = 2
     short_beam_size: int = 4               # for 1-3 word segments not in the phrasebook (D-017)
     threads: int = 4
+    repeat_min_run: int | None = 3         # output phrase repeated this often in a row (and 2 more
+                                           # than in the source): "[unclear]"; None = off (D-023)
 
 
 @dataclass(frozen=True)
