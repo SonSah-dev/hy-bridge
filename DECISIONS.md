@@ -407,3 +407,21 @@ Published model claims are labelled *reported* until they have been reproduced h
   - **Replaying the recorded call** (same VAD segments, 28 of 28 matched to the live log) with the new defaults: **2 labels, 26/28 right**; the 2 others are `Speaker ?`, each person's first reply before anyone was known. Sweep: thresholds 0.3–0.35 with a 2 s minimum gave 26/28; 0.4 with 2 s gave 3 labels; a 3 s minimum labelled many lines `Speaker ?`.
   - **Caveat:** tuned and checked on the same 28 segments, so not held out. S2 (60 s silence), S3 (short replies) and a 10-minute S5 were not run. A second call is needed.
   - The offline numbers above were measured before `new_speaker_min_s` existed.
+
+## D-021 Names list: Armenian-letter names -> Latin before translation (Step 8, quality)
+- **Date:** 2026-10-29 · **Status:** verified by replaying all 211 logged and eval texts; not yet on a live call.
+- **Problem (D-019, test call D-020):** NLLB turns Armenian-letter names into words or other names: `Սաթենիկ` → "Satan"/"Satanic"/"sadist", `Լուսինեն` → "Lune", `Գոհա` → "Gohan", `Վանաձոր` → "Vanassar", `Սոնաան` → "Sonja". The phrasebook handles names only after a greeting it knows (D-017).
+- **Check first:** NLLB keeps **Latin** names inside Armenian sentences: `Լավ Gohar, դուք մեզ լսո՞ւմ եք։` → "All right, Gohar, can you hear us?"; `քո եւ Satenik-ի զրույցը` → "your conversation with Satenik". But `Satenik ջան` → "Mr. Satenik".
+- **Change:**
+  - `names.tsv` (user-editable, same format as the glossary): Armenian spelling → Latin. Applied in `TextFixer` after the glossary, with the glossary's matching: endings kept after a hyphen (`Satenik-ի`), and one-letter misspellings for names of 6+ letters (`Սաթթենիկ`, `սաթեմիկի`). Shorter names match exactly, so ASR variants are listed (`Սոնաան`, `Գոհա`).
+  - `ջան` right after a name is dropped, including when glued on (`Սոնաջան` → Sona).
+  - Phrasebook: a Latin capitalised word counts as a name too, so `Առայժմ Satenik` → "Bye for now, Satenik." (new entry `առայժմ`).
+  - Setting `text.names` (`""` = off).
+  - **Not done:** transliterating unknown capitalised words. Of the mid-sentence capitalised words in the logs, many were ASR garbage, and `Հայաստանի` is already translated as "Armenia", which transliteration would break.
+- **Replay** (same ASR text, so recognition errors remain): 21 of 211 texts change.
+  - **Better (16):** "Hi, Satenik.", "Bye for now, Satenik.", "My name is Lusine.", "All right, Gohar, …", "your conversation with Satenik", "I'm Anahit Adamyan from Vanadzor", "Very well, Sona.", "Hello, Sona." (was "Sanaan").
+  - **Same:** "Hello, Sona." twice (the phrasebook already did it).
+  - **Not better:** `Սաթեն՞ք` (garbled) "What is Satan?" → "Do you eat?".
+  - **Worse (1):** a garbled post-call segment (`Աքատամ շատ լավ Սոն ա ջան գրիլա Սոնա Ան…`) went from "Sonja, sonja, …" to a crude English sentence. Garbage in either case; the `[unclear]` check (PLAN.md backlog) is meant for such text.
+- **Flattered:** `Անահիտ`, `Ադամյան`, `Վանաձոր` come from eval clip mic-01, and the others from the logged calls, as with the glossary (D-016). The real test is the interview's names, which the user adds beforehand.
+- 170 unit tests pass.

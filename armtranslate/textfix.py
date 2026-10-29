@@ -8,6 +8,11 @@ Step 4 showed two ASR -> MT failure patterns (D-015):
     Number words worth 10 or more become digits, which NLLB translates correctly.
 Single small numbers (`մեկ`, `չորս`) are left alone: `մեկ` also means "one/someone", and
 NLLB already handles them.
+
+Names (D-021): NLLB mistranslates many Armenian-letter names (`Սաթենիկ` -> "Satan",
+`Լուսինեն` -> "Lune") but keeps Latin ones. A user-editable names list (same format and
+matching as the glossary) turns them into Latin letters, and the endearment `ջան` after a
+name is dropped, because NLLB read "Satenik ջան" as "Mr. Satenik".
 """
 from __future__ import annotations
 
@@ -232,14 +237,31 @@ def numbers_to_digits(text: str, minimum: int = 10) -> str:
 _ALPHA = set(re.findall(rf"[{ARM}]", "".join(map(chr, range(0x0531, 0x0588)))))
 
 
+ENDEARMENT = "ջան"
+_LATIN_THEN_JAN = re.compile(rf"([A-Za-z][A-Za-z{ARM}-]*)\s+{ENDEARMENT}(?![{ARM}])", re.IGNORECASE)
+
+
+def apply_names(text: str, entries: list[tuple[str, str]]) -> str:
+    """Armenian-letter names -> Latin (endings kept, as the glossary); drop ջան after a name."""
+    spellings = {src for src, _ in entries}
+    def unglue(m: re.Match) -> str:                      # Սոնաջան -> Սոնա (ASR glues it on)
+        return m.group(1) if m.group(1).lower() in spellings else m.group(0)
+    text = re.sub(rf"(?<![{ARM}])([{ARM}]+?){ENDEARMENT}(?![{ARM}])", unglue, text, flags=re.IGNORECASE)
+    text = apply_glossary(text, entries)
+    return _LATIN_THEN_JAN.sub(r"\1", text)
+
+
 class TextFixer:
-    def __init__(self, glossary: str | Path | None, numbers: bool = True):
+    def __init__(self, glossary: str | Path | None, numbers: bool = True, names: str | Path | None = None):
         self.entries = load_glossary(glossary) if glossary else []
+        self.names = load_glossary(names) if names else []
         self.numbers = numbers
 
     def __call__(self, text: str) -> str:
         if self.entries:
             text = apply_glossary(text, self.entries)
+        if self.names:
+            text = apply_names(text, self.names)
         if self.numbers:
             text = numbers_to_digits(text)
         return text

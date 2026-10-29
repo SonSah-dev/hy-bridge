@@ -39,6 +39,7 @@ threads = 4
 glossary = "glossary.tsv"     # Armenian-letter spellings of terms, fixed before translation; "" = off
 numbers_to_digits = true      # spelled-out numbers >= 10 become digits before translation
 phrasebook = "phrasebook.tsv" # short replies translated directly, not by NLLB; "" = off
+names = "names.tsv"           # people and places -> Latin letters before translation; "" = off
 min_letters = 2               # segments with fewer Armenian letters (noise, "«.") are not shown
 
 [speakers]

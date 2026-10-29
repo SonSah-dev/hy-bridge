@@ -58,6 +58,7 @@ class TextConfig:
     glossary: str = "glossary.tsv"         # Armenian-letter spellings -> terms, applied before MT; "" = off
     numbers_to_digits: bool = True         # spelled-out numbers >= 10 become digits before MT
     phrasebook: str = "phrasebook.tsv"     # short replies translated directly; "" = off (D-017)
+    names: str = "names.tsv"               # names -> Latin letters before MT; "" = off (D-021)
     min_letters: int = 2                   # segments with fewer Armenian letters are not shown
 
 

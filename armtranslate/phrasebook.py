@@ -16,7 +16,7 @@ from .textfix import ARM
 MAX_WORDS = 3
 ENDEARMENT = "ջան"
 _WORD = re.compile(rf"[{ARM}A-Za-z]+(?:-[{ARM}A-Za-z]+)?")
-_UPPER = re.compile(r"[Ա-Ֆ]")
+_UPPER = re.compile(r"[Ա-ՖA-Z]")            # Latin: a name already fixed by names.tsv (D-021)
 
 _TRANSLIT = {
     "ա": "a", "բ": "b", "գ": "g", "դ": "d", "ե": "e", "զ": "z", "է": "e", "ը": "y", "թ": "t",
