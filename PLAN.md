@@ -13,7 +13,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 | Mon 26 | 4 | Translation: NLLB-600M — quality + speed on CPU | 0.75 | Choice recorded | done 2026-10-27 (D-015); NLLB licence accepted (D-005) |
 | Mon 26 | 5 | Walking skeleton, mic path: capture → VAD → ASR → MT → terminal, latency logged | 2.0 | Live `Me` lines; latency logged per segment | done 2026-10-27: playback and live runs pass; live accuracy fixes (D-016, D-017, D-018) |
 | Tue 27 | 6 | Add loopback source, single inference worker, configuration (D-010/D-011) | 1.5 | Both sources print; settings come from config | done 2026-10-28: playback, live loopback and live call pass (D-019) |
-| Tue 27 | 7 | Speaker clustering + test call: 2 remote speakers on separate devices, taking turns | 2.5 | TESTS.md §Speakers | code + offline check done 2026-10-28 (D-020); live test call (S1–S5) pending |
+| Tue 27 | 7 | Speaker clustering + test call: 2 remote speakers on separate devices, taking turns | 2.5 | TESTS.md §Speakers | code done; test call 2026-10-29: latency and S4 pass, labels fixed by replay (D-020); second call for S1–S3, S5 pending |
 | Tue 27 | 8 | Latency hardening during a live call | 1.0 | p95 within target | — |
 | Wed 28 | 9 | Full rehearsal on the interview setup | 1.0 | TESTS.md checklist passes | — |
 | Wed 28 | 10 | README, limitations, final chat export into `chats/`, push | 1.5 | Deliverables complete | — |

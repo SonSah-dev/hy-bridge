@@ -103,7 +103,8 @@ def main() -> int:
         embed = Embedder(threads=sc.threads)
         embed(np.zeros(16_000, np.float32))
         speakers = SpeakerLabeler(embed, SpeakerTracker(sc.similarity_threshold, sc.min_segment_s,
-                                                        sc.max_remote_speakers, sc.short_threshold))
+                                                        sc.max_remote_speakers, sc.new_speaker_min_s,
+                                                        sc.short_threshold))
 
     run_dir = Path(args.runs) / datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)

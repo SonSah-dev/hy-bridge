@@ -13,7 +13,8 @@ def test_defaults_match_d010():
     assert c.segmentation.end_pause_ms == 1000   # D-010 default 600, changed by D-016
     assert c.segmentation.max_segment_s == 8.0
     assert c.speakers.min_segment_s == 1.0
-    assert c.speakers.similarity_threshold == 0.4   # measured offline in Step 7 (D-020)
+    assert c.speakers.similarity_threshold == 0.35  # tuned on the Step 7 test call (D-020)
+    assert c.speakers.new_speaker_min_s == 2.0
     assert c.speakers.short_threshold is None and c.speakers.enabled
     assert c.speakers.max_remote_speakers == 4
     assert c.scenario.remote_participants == 2 and c.scenario.separate_devices

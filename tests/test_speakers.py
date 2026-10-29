@@ -49,6 +49,16 @@ def test_short_segment_borrows_label_but_never_creates():
     assert t.assign(near(B), 0.6)[0] == UNKNOWN       # unlike everyone known: no new speaker
 
 
+def test_medium_segment_joins_but_never_starts_a_speaker():
+    t = SpeakerTracker(0.5, min_segment_s=1.0, new_speaker_min_s=2.0)
+    label, info = t.assign(near(A), 1.5)              # nobody known yet: like the call's first replies
+    assert label == UNKNOWN and info["decision"] == "unknown" and t.counts == []
+    t.assign(near(A), 3.0)
+    assert t.assign(near(A), 1.5)[0] == "Speaker 1" and t.counts == [2]   # joins, moves the centroid
+    assert t.assign(near(B), 1.5)[0] == UNKNOWN and len(t.counts) == 1
+    assert t.assign(near(B), 2.5)[0] == "Speaker 2"
+
+
 def test_short_threshold_is_separate():
     t = SpeakerTracker(0.99, min_segment_s=1.0, short_threshold=0.5)
     t.assign(A, 3.0)

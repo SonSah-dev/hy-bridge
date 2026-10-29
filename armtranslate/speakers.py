@@ -4,8 +4,10 @@ Microphone segments are always `Me`. Each system-audio segment gets a voice embe
 (WeSpeaker ResNet34-LM, ONNX, 256 dims) and is compared with the running centroid of every
 remote speaker seen so far:
   - a segment of at least `min_segment_s` joins the most similar speaker if the cosine
-    similarity reaches `similarity_threshold`, and updates that speaker's centroid; otherwise
-    it starts a new speaker, up to `max_remote_speakers` (after that, the most similar one);
+    similarity reaches `similarity_threshold`, and updates that speaker's centroid;
+  - otherwise, if it is at least `new_speaker_min_s` long, it starts a new speaker, up to
+    `max_remote_speakers` (after that, the most similar one); a shorter one is `Speaker ?`.
+    On the live test call, 1.4-2.8 s first replies each started a new speaker (D-020);
   - a shorter segment only *borrows* a label: the most similar existing speaker if the
     similarity reaches `short_threshold`, else `Speaker ?`. It never creates or moves a
     speaker, because short segments give unreliable embeddings (D-010).
@@ -103,6 +105,7 @@ class SpeakerTracker:
     similarity_threshold: float
     min_segment_s: float = 1.0
     max_speakers: int = 4
+    new_speaker_min_s: float = 2.0         # shorter segments may join a speaker but never start one
     short_threshold: float | None = None   # for short segments; None = same as similarity_threshold
     _sums: list[np.ndarray] = field(default_factory=list)
     counts: list[int] = field(default_factory=list)
@@ -127,6 +130,8 @@ class SpeakerTracker:
             return UNKNOWN, {**info, "decision": "short-unknown"}
         if top is not None and top >= self.similarity_threshold:
             decision = "match"
+        elif duration_s < self.new_speaker_min_s:
+            return UNKNOWN, {**info, "decision": "unknown"}
         elif len(self._sums) < self.max_speakers:
             self._sums.append(np.zeros_like(emb))
             self.counts.append(0)

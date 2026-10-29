@@ -44,8 +44,9 @@ min_letters = 2               # segments with fewer Armenian letters (noise, "«
 [speakers]
 enabled = true                # false (or --no-speakers): system audio is labelled "Remote"
 min_segment_s = 1.0           # shorter system-audio segments never create or move a speaker
-similarity_threshold = 0.4    # cosine to a speaker's centroid; higher = more new labels (D-020)
-# short_threshold = 0.4       # for shorter segments; unset = similarity_threshold.
+new_speaker_min_s = 2.0       # shorter segments may join a known speaker but never start a new one
+similarity_threshold = 0.35   # cosine to a speaker's centroid; higher = more new labels (D-020)
+# short_threshold = 0.35      # for shorter segments; unset = similarity_threshold.
                               # Below it a short reply is shown as "Speaker ?"
 max_remote_speakers = 4       # safety cap against label explosion; brief requires >= 2
 threads = 2                   # onnxruntime threads for the speaker embedding
