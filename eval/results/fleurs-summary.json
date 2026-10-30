@@ -1,0 +1,107 @@
+{
+ "clips": 932,
+ "audio_h": 3.01,
+ "cer": 0.0283,
+ "wer": 0.1045,
+ "rtf": 0.0288,
+ "asr_max_s": 1.146,
+ "with_english_ref": 932,
+ "variants": {
+  "none": {
+   "chrf": 57.59,
+   "bleu": 30.37,
+   "texts_changed_vs_none": 0
+  },
+  "glossary": {
+   "chrf": 57.62,
+   "bleu": 30.41,
+   "texts_changed_vs_none": 3
+  },
+  "names": {
+   "chrf": 57.58,
+   "bleu": 30.35,
+   "texts_changed_vs_none": 1
+  },
+  "all": {
+   "chrf": 57.61,
+   "bleu": 30.4,
+   "texts_changed_vs_none": 4
+  }
+ },
+ "changed_by_lists": [
+  {
+   "id": "1875",
+   "asr": "Մոլորակի գետերի օվկիանոս լցվող ջրի լիարժեք քսան տոկոսը հում է ամազոնից։",
+   "fixed": "Մոլորակի գետերի օվկիանոս լցվող ջրի լիարժեք 20 տոկոսը հում է Amazon-ից։",
+   "ref": "A full 20 percent of the water that pours out of the planet's rivers into the oceans comes from the Amazon.",
+   "en_none": "The Amazon is responsible for 20 percent of the water that fills the oceans of the world's rivers.",
+   "en_all": "The entire 20 percent of the water that fills the oceans of the world's rivers comes from the Amazon.",
+   "chrf_none": 52.9,
+   "chrf_all": 65.1
+  },
+  {
+   "id": "1875",
+   "asr": "Մոլորակի գետերի օվկիանոս լցվող ջրի լիարժեք քսան տոկոսը հոսում է ամազոնից։",
+   "fixed": "Մոլորակի գետերի օվկիանոս լցվող ջրի լիարժեք 20 տոկոսը հոսում է Amazon-ից։",
+   "ref": "A full 20 percent of the water that pours out of the planet's rivers into the oceans comes from the Amazon.",
+   "en_none": "The Amazon is responsible for 20 percent of the water that fills the oceans and rivers on the planet.",
+   "en_all": "The full 20 percent of the water that fills the oceans of the world's rivers flows from the Amazon.",
+   "chrf_none": 55.4,
+   "chrf_all": 63.2
+  },
+  {
+   "id": "1875",
+   "asr": "Մոլորակի գետերի օվկիանոս լցվող ջրի լիարժեք քսան տոկոսը հոսում է ամազոնից։",
+   "fixed": "Մոլորակի գետերի օվկիանոս լցվող ջրի լիարժեք 20 տոկոսը հոսում է Amazon-ից։",
+   "ref": "A full 20 percent of the water that pours out of the planet's rivers into the oceans comes from the Amazon.",
+   "en_none": "The Amazon is responsible for 20 percent of the water that fills the oceans and rivers on the planet.",
+   "en_all": "The full 20 percent of the water that fills the oceans of the world's rivers flows from the Amazon.",
+   "chrf_none": 55.4,
+   "chrf_all": 63.2
+  },
+  {
+   "id": "1834",
+   "asr": "Նաեւ դեպի հյուսիս այցելեք մեր Ֆատիմա՝ Աստվածուհու հոյակերտ սրբավայր սրբատեղի, որն աշխարհով մեկ հայտնի է որպես Սուրբ Մարիամի հայտնության վայր։",
+   "fixed": "Նաեւ դեպի հյուսիս այցելեք մեր Ֆատիմա՝ Աստվածուհու հոյակերտ սրբավայր սրբատեղի, որն աշխարհով մեկ հայտնի է որպես Սուրբ Mariam-ի հայտնության վայր։",
+   "ref": "Also to the north visit the great Sanctuary of Our Lady of Fatima (Shrine), a place of worldwide famous Marian apparitions.",
+   "en_none": "Also, head north to our magnificent sanctuary of Our Lady of Fatima, known worldwide as the site of the apparition of St. Mary.",
+   "en_all": "Also head north to visit our Fatima, the magnificent sanctuary of the Goddess, known worldwide as the site of the apparition of Saint Mariam.",
+   "chrf_none": 49.9,
+   "chrf_all": 41.8
+  }
+ ],
+ "unclear": {
+  "thresholds": [
+   -0.3,
+   0.15
+  ],
+  "flagged": 0,
+  "flagged_share": 0.0,
+  "mean_cer_flagged": null,
+  "mean_cer_kept": 0.0282,
+  "by_cer": {
+   "cer>=0.0": [
+    932,
+    0
+   ],
+   "cer>=0.1": [
+    51,
+    0
+   ],
+   "cer>=0.2": [
+    7,
+    0
+   ],
+   "cer>=0.3": [
+    0,
+    0
+   ],
+   "cer>=0.5": [
+    0,
+    0
+   ]
+  },
+  "examples": []
+ },
+ "mt_repeat_flagged": []
+}

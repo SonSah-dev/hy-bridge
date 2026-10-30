@@ -26,6 +26,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 - Chat converter: built during Step 10 at the latest.
 
 **Backlog (noted 2026-10-27, to come back to):**
+- **Public held-out check: done 2026-10-30 on FLEURS (D-024).** It covers read speech only; the conversational set below is still needed for interview vocabulary.
 - **Challenge-specific eval set.** A second, small, carefully transcribed set aimed at the errors seen live (D-017, D-018), kept separate from the 15 Step 2 clips. The current glossary was tuned on those clips, so this set is also the held-out check D-016 lacks. Include real examples of:
   - numbers: `13,800`, dates, times, Armenian number words;
   - English terms inside Armenian sentences: Python, GitHub, API, Docker, Kubernetes;

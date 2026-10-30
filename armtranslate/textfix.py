@@ -40,13 +40,14 @@ def load_glossary(path: str | Path) -> list[tuple[str, str]]:
     return sorted(entries, key=lambda e: -len(e[0]))
 
 
-def apply_glossary(text: str, entries: list[tuple[str, str]], fuzzy: bool = True) -> str:
+def apply_glossary(text: str, entries: list[tuple[str, str]], fuzzy: bool = True,
+                   fuzzy_needs_capital: bool = False) -> str:
     suffix = "|".join(SUFFIXES)
     for src, dst in entries:
         stem = r"\s+".join(map(re.escape, src.split()))
         pat = re.compile(rf"(?<![{ARM}A-Za-z]){stem}({suffix})?(?![{ARM}])", re.IGNORECASE)
         text = pat.sub(lambda m: dst + (f"-{m.group(1)}" if m.group(1) else ""), text)
-    return _fuzzy_glossary(text, entries) if fuzzy else text
+    return _fuzzy_glossary(text, entries, fuzzy_needs_capital) if fuzzy else text
 
 
 # The ASR spells a term differently almost every time (live runs, D-018): version control came
@@ -71,13 +72,14 @@ def _glossary_word(entry: str, word: str, loose: bool) -> tuple[int, str] | None
             continue
         d = edit_distance(le, _letters(stem))
         limit = len(le) // 3 if loose else 1
-        ok = d == 0 or (len(le) >= FUZZY_GLOSSARY_MIN and d <= limit and (d == 1 or stem[0] == e[0]))
+        # misspellings keep the first letter: FLEURS had `Լայթեն` (Layton) ~ `փայթեն` (Python) (D-024)
+        ok = d == 0 or (len(le) >= FUZZY_GLOSSARY_MIN and d <= limit and stem[0] == e[0])
         if ok and (best is None or d < best[0]):
             best = (d, suf)
     return best
 
 
-def _fuzzy_glossary(text: str, entries: list[tuple[str, str]]) -> str:
+def _fuzzy_glossary(text: str, entries: list[tuple[str, str]], needs_capital: bool = False) -> str:
     tokens = _TOKEN.findall(text)
     alpha = [i for i, t in enumerate(tokens) if t[0] in _ALPHA]
     out, pos, n = [], 0, 0
@@ -88,6 +90,8 @@ def _fuzzy_glossary(text: str, entries: list[tuple[str, str]]) -> str:
             span = alpha[n:n + len(ws)]
             if len(span) < len(ws) or any(not all(tokens[k].isspace() for k in range(a + 1, b))
                                           for a, b in zip(span, span[1:])):
+                continue
+            if needs_capital and not tokens[span[0]][0].isupper():
                 continue
             matches = [_glossary_word(e, tokens[i], loose=len(ws) > 1) for e, i in zip(ws, span)]
             # every word must match; only the last may carry an ending
@@ -247,7 +251,8 @@ def apply_names(text: str, entries: list[tuple[str, str]]) -> str:
     def unglue(m: re.Match) -> str:                      # Սոնաջան -> Սոնա (ASR glues it on)
         return m.group(1) if m.group(1).lower() in spellings else m.group(0)
     text = re.sub(rf"(?<![{ARM}])([{ARM}]+?){ENDEARMENT}(?![{ARM}])", unglue, text, flags=re.IGNORECASE)
-    text = apply_glossary(text, entries)
+    # a misspelt name must be capitalised: FLEURS had `լուսինն` ("the moon") ~ Լուսինե (D-024)
+    text = apply_glossary(text, entries, fuzzy_needs_capital=True)
     return _LATIN_THEN_JAN.sub(r"\1", text)
 
 

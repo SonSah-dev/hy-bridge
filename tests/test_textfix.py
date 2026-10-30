@@ -118,3 +118,9 @@ def test_names_short_entries_exact_only():
 def test_textfixer_applies_names_after_glossary():
     fix = TextFixer(ROOT / "glossary.tsv", names=ROOT / "names.tsv")
     assert fix("Սաթենիկ ջան, փայթենը գիտես՞") == "Satenik, Python-ը գիտես՞"
+
+
+def test_held_out_false_matches_are_blocked():          # FLEURS test split (D-024)
+    assert apply_glossary("Լայթեն վարչապետի հետ", GLOSSARY) == "Լայթեն վարչապետի հետ"   # Layton, not Python
+    assert apply_names("ինչպես լուսինն է ձգողության", NAMES) == "ինչպես լուսինն է ձգողության"  # the moon
+    assert apply_names("Լուսինն էլ", NAMES) == "Lusine էլ"                              # capitalised: a name
