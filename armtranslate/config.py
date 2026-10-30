@@ -42,6 +42,8 @@ class SegmentationConfig:
 @dataclass(frozen=True)
 class AsrConfig:
     threads: int = 2                       # onnxruntime intra-op threads; 2 beat the default (D-013)
+    unclear_mean_logprob: float | None = -0.3   # mean token log-prob below this: "[unclear]" (D-022)
+    unclear_low_share: float | None = 0.15      # or this share of tokens under p=0.5; None = off
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,8 @@ class MtConfig:
     beam_size: int = 2
     short_beam_size: int = 4               # for 1-3 word segments not in the phrasebook (D-017)
     threads: int = 4
+    repeat_min_run: int | None = 3         # output phrase repeated this often in a row (and 2 more
+                                           # than in the source): "[unclear]"; None = off (D-023)
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,7 @@ class TextConfig:
     glossary: str = "glossary.tsv"         # Armenian-letter spellings -> terms, applied before MT; "" = off
     numbers_to_digits: bool = True         # spelled-out numbers >= 10 become digits before MT
     phrasebook: str = "phrasebook.tsv"     # short replies translated directly; "" = off (D-017)
+    names: str = "names.tsv"               # names -> Latin letters before MT; "" = off (D-021)
     min_letters: int = 2                   # segments with fewer Armenian letters are not shown
 
 

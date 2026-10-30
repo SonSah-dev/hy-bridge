@@ -7,6 +7,7 @@ Two model families, both converted from the official Hugging Face repos with
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
@@ -16,6 +17,30 @@ NLLB_SRC, NLLB_TGT = "hye_Armn", "eng_Latn"
 # Output length cap: 2 x input tokens + 10. Real translations stayed within 2 x (134 logged texts);
 # a garbled segment made NLLB loop ("well, well, ...") to 242 tokens and 13.8 s (D-020).
 MAX_OUT_RATIO, MAX_OUT_EXTRA = 2, 10
+_WORD = re.compile(r"[^\W_]+")
+
+
+def repeat_run(text: str, max_n: int = 4) -> int:
+    """Longest run of one word n-gram (n <= max_n) repeated back to back, case and punctuation
+    ignored: "Well, well, well" -> 3; "what have you done, what have you done" -> 2."""
+    w = [x.lower() for x in _WORD.findall(text)]
+    best = 1
+    for n in range(1, max_n + 1):
+        for i in range(len(w) - 2 * n + 1):
+            k = 1
+            while w[i + k * n:i + (k + 1) * n] == w[i:i + n]:
+                k += 1
+            best = max(best, k)
+    return best
+
+
+def is_degenerate(source: str, output: str, min_run: int = 3, margin: int = 2) -> bool:
+    """MT looped (D-023): a phrase repeats at least `min_run` times in a row in the output, and
+    at least `margin` times more than anything repeats in the source. So "այո, այո, այո" ->
+    "yes, yes, yes" passes, and so does "Շնորհակալություն, շնորհակալություն, շատ
+    շնորհակալություն" -> "Thank you, thank you, thank you very much" (source x2, output x3)."""
+    run = repeat_run(output)
+    return run >= min_run and run >= repeat_run(source) + margin
 
 
 def model_dir(family: str, compute: str) -> Path:

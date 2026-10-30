@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from armtranslate.textfix import TextFixer, apply_glossary, load_glossary, numbers_to_digits
+from armtranslate.textfix import TextFixer, apply_glossary, apply_names, load_glossary, numbers_to_digits
 
 ROOT = Path(__file__).resolve().parent.parent
 GLOSSARY = load_glossary(ROOT / "glossary.tsv")
@@ -91,3 +91,30 @@ def test_glossary_fuzzy(asr, fixed):
 def test_glossary_fuzzy_false_positive_from_replay():
     assert apply_glossary("Այնին աշխատանքը", GLOSSARY) == "Այնին աշխատանքը"   # not Python
     assert apply_glossary("Այթինը ծրագրավորման լեզու է", GLOSSARY) == "Python-ը ծրագրավորման լեզու է"
+
+
+# ----------------------------------------------------------------- names (D-021)
+NAMES = load_glossary(ROOT / "names.tsv")
+
+
+@pytest.mark.parametrize("asr, fixed", [
+    ("Առայժմ Սաթթենիկ ջան։", "Առայժմ Satenik։"),                 # misspelt, ջան dropped
+    ("Ես Լուսինեն եմ։", "Ես Lusine-ն եմ։"),                          # ending kept
+    ("Լավ Գոհա ջան, դուք մեզ լսո՞ւմ եք։", "Լավ Gohar, դուք մեզ լսո՞ւմ եք։"),
+    ("Բարեւ, Սոնաջան։", "Բարեւ, Sona։"),                              # glued endearment
+    ("քո եւ Սաթենիկի զրույցը", "քո եւ Satenik-ի զրույցը"),
+    ("քաղաք Վանաձորից", "քաղաք Vanadzor-ից"),
+    ("Մամ ջան։", "Մամ ջան։"),                                          # not a name: left alone
+    ("Կրթությունս Հայաստանի", "Կրթությունս Հայաստանի"),               # NLLB knows it: not listed
+])
+def test_names(asr, fixed):
+    assert apply_names(asr, NAMES) == fixed
+
+
+def test_names_short_entries_exact_only():
+    assert apply_names("Սոնի", NAMES) == "Սոնի"          # 4-letter Սոնա: no fuzzy match
+
+
+def test_textfixer_applies_names_after_glossary():
+    fix = TextFixer(ROOT / "glossary.tsv", names=ROOT / "names.tsv")
+    assert fix("Սաթենիկ ջան, փայթենը գիտես՞") == "Satenik, Python-ը գիտես՞"

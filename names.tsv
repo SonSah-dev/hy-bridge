@@ -1,0 +1,33 @@
+# Names of people and places, and the Latin spelling to translate them with (DECISIONS.md D-021).
+# Applied before translation, after the glossary: NLLB keeps Latin names as they are
+# ("Satenik" stays Satenik) but mistranslates many Armenian-letter ones (Սաթենիկ -> "Satan").
+# One entry per line: Armenian spelling<TAB>Latin spelling. Matching ignores case and keeps an
+# Armenian ending (Սաթենիկի -> Satenik-ի); names of 6+ letters also match one-letter misspellings.
+# The endearment ջան after a name is dropped (NLLB turned "Satenik ջան" into "Mr. Satenik").
+# **Add the names of everyone in the interview, and the places you expect, before it starts.**
+# Short names (under 6 letters) match only exactly: add the ASR's variants as extra lines.
+
+# people
+Սոնա	Sona
+Սոնաան	Sona
+Սանաան	Sona
+Սաթենիկ	Satenik
+Սաթեն	Saten
+Լուսինե	Lusine
+Գոհար	Gohar
+Գոհա	Gohar
+Անահիտ	Anahit
+Ադամյան	Adamyan
+Աննա	Anna
+Արամ	Aram
+Տիգրան	Tigran
+Նարեկ	Narek
+Մարիամ	Mariam
+# places (NLLB already knows Հայաստան -> Armenia and Երեւան -> Yerevan)
+Վանաձոր	Vanadzor
+Գյումրի	Gyumri
+Դիլիջան	Dilijan
+Ջերմուկ	Jermuk
+Սեւան	Sevan
+Աշտարակ	Ashtarak
+Էջմիածին	Etchmiadzin

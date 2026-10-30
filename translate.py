@@ -91,7 +91,7 @@ def main() -> int:
     asr = Recognizer(threads=cfg.asr.threads)
     mt = Translator(cfg.mt.family, cfg.mt.compute, threads=cfg.mt.threads, beam_size=cfg.mt.beam_size)
     glossary = (ROOT / cfg.text.glossary) if cfg.text.glossary else None
-    fixer = TextFixer(glossary, cfg.text.numbers_to_digits)
+    fixer = TextFixer(glossary, cfg.text.numbers_to_digits, (ROOT / cfg.text.names) if cfg.text.names else None)
     phrasebook = Phrasebook(ROOT / cfg.text.phrasebook) if cfg.text.phrasebook else None
     translate = SegmentTranslator(mt, phrasebook, cfg.mt.short_beam_size)
     asr.transcribe(np.zeros(16_000, np.float32))      # warm-up, so the first phrase is not slower
@@ -109,8 +109,18 @@ def main() -> int:
     run_dir = Path(args.runs) / datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
     log = open(run_dir / "segments.jsonl", "w", encoding="utf-8", newline="\n")
-    worker = Worker(asr.transcribe, translate, fixer, log=log, min_letters=cfg.text.min_letters,
-                    speakers=speakers)
+    from armtranslate.asr import is_unclear
+
+    def unclear(fixed: str, conf: dict) -> bool:          # an exact phrasebook phrase is trusted
+        return (is_unclear(conf, cfg.asr.unclear_mean_logprob, cfg.asr.unclear_low_share)
+                and (phrasebook is None or phrasebook.lookup(fixed) is None))
+
+    from armtranslate.mt import is_degenerate
+    degenerate = None
+    if cfg.mt.repeat_min_run is not None:
+        degenerate = lambda src, en: is_degenerate(src, en, cfg.mt.repeat_min_run)  # noqa: E731
+    worker = Worker(asr.transcribe_scored, translate, fixer, log=log, min_letters=cfg.text.min_letters,
+                    speakers=speakers, unclear=unclear, degenerate=degenerate)
 
     p = None
     sources, inputs = {}, {}

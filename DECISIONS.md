@@ -407,3 +407,50 @@ Published model claims are labelled *reported* until they have been reproduced h
   - **Replaying the recorded call** (same VAD segments, 28 of 28 matched to the live log) with the new defaults: **2 labels, 26/28 right**; the 2 others are `Speaker ?`, each person's first reply before anyone was known. Sweep: thresholds 0.3–0.35 with a 2 s minimum gave 26/28; 0.4 with 2 s gave 3 labels; a 3 s minimum labelled many lines `Speaker ?`.
   - **Caveat:** tuned and checked on the same 28 segments, so not held out. S2 (60 s silence), S3 (short replies) and a 10-minute S5 were not run. A second call is needed.
   - The offline numbers above were measured before `new_speaker_min_s` existed.
+
+## D-021 Names list: Armenian-letter names -> Latin before translation (Step 8, quality)
+- **Date:** 2026-10-29 · **Status:** verified by replaying all 211 logged and eval texts; not yet on a live call.
+- **Problem (D-019, test call D-020):** NLLB turns Armenian-letter names into words or other names: `Սաթենիկ` → "Satan"/"Satanic"/"sadist", `Լուսինեն` → "Lune", `Գոհա` → "Gohan", `Վանաձոր` → "Vanassar", `Սոնաան` → "Sonja". The phrasebook handles names only after a greeting it knows (D-017).
+- **Check first:** NLLB keeps **Latin** names inside Armenian sentences: `Լավ Gohar, դուք մեզ լսո՞ւմ եք։` → "All right, Gohar, can you hear us?"; `քո եւ Satenik-ի զրույցը` → "your conversation with Satenik". But `Satenik ջան` → "Mr. Satenik".
+- **Change:**
+  - `names.tsv` (user-editable, same format as the glossary): Armenian spelling → Latin. Applied in `TextFixer` after the glossary, with the glossary's matching: endings kept after a hyphen (`Satenik-ի`), and one-letter misspellings for names of 6+ letters (`Սաթթենիկ`, `սաթեմիկի`). Shorter names match exactly, so ASR variants are listed (`Սոնաան`, `Գոհա`).
+  - `ջան` right after a name is dropped, including when glued on (`Սոնաջան` → Sona).
+  - Phrasebook: a Latin capitalised word counts as a name too, so `Առայժմ Satenik` → "Bye for now, Satenik." (new entry `առայժմ`).
+  - Setting `text.names` (`""` = off).
+  - **Not done:** transliterating unknown capitalised words. Of the mid-sentence capitalised words in the logs, many were ASR garbage, and `Հայաստանի` is already translated as "Armenia", which transliteration would break.
+- **Replay** (same ASR text, so recognition errors remain): 21 of 211 texts change.
+  - **Better (16):** "Hi, Satenik.", "Bye for now, Satenik.", "My name is Lusine.", "All right, Gohar, …", "your conversation with Satenik", "I'm Anahit Adamyan from Vanadzor", "Very well, Sona.", "Hello, Sona." (was "Sanaan").
+  - **Same:** "Hello, Sona." twice (the phrasebook already did it).
+  - **Not better:** `Սաթեն՞ք` (garbled) "What is Satan?" → "Do you eat?".
+  - **Worse (1):** a garbled post-call segment (`Աքատամ շատ լավ Սոն ա ջան գրիլա Սոնա Ան…`) went from "Sonja, sonja, …" to a crude English sentence. Garbage in either case; the `[unclear]` check (PLAN.md backlog) is meant for such text.
+- **Flattered:** `Անահիտ`, `Ադամյան`, `Վանաձոր` come from eval clip mic-01, and the others from the logged calls, as with the glossary (D-016). The real test is the interview's names, which the user adds beforehand.
+- 170 unit tests pass.
+
+## D-022 `[unclear]` instead of invented English for garbled recognition (Step 8, quality)
+- **Date:** 2026-10-29 · **Status:** verified offline on 131 recorded segments; not yet on a live call.
+- **Problem (D-017, D-019, D-020):** unclear speech gives non-words, and NLLB turns them into fluent but invented English (`Տ գրված ծ ին բալ ծրագիր…` → "It's written in a blueprint."; `Աես բարառերն են…` → "Those are the bastards, you know.").
+- **Signal:** the FastConformer CTC head gives a log-probability per output token through onnx-asr's `with_timestamps()` adapter, in the same pass: **no extra cost** (8 s segment: 0.069 s plain, 0.068 s scored). Per segment: the **mean token log-probability** and the **share of tokens with probability < 0.5**. Both are logged in `segments.jsonl` (`asr_conf`).
+- **Data:** every recorded run re-segmented with the live VAD settings: the test call (`20261029-202643`, mic and system: clear call speech plus garbled after-call chat), the English sample played as the call (`20261028-230813`, all garbled), and eval-clip playback (`20261027-191427`, `-221739`, clean). 114 unique texts.
+  - Clear sentences: mean −0.00 to −0.10, low share 0. Clearly garbled: mean −0.3 to −0.94 and/or low share ≥ 0.15. Between −0.3 and −0.15, garbled chat and correct short words (`Ցտեսություն։` −0.20, `Շնորհակալություն։` −0.21) overlap.
+- **Rule:** `[unclear]` if mean < **−0.3** or low share ≥ **0.15**, unless the fixed text is an exact phrasebook phrase (D-017; a known phrase is trusted). The line shows the Armenian and `[unclear]`; MT is skipped. Settings `asr.unclear_mean_logprob`, `asr.unclear_low_share` (`none` = off). `summary.json` counts `unclear`.
+- **Replay result:** 12 of 114 flagged.
+  - **10 clearly garbled:** two forced-cut fragments of eval clip mic-07 (−0.94, −0.87), `Ապրումեք սածան`, `Տ գրված ծ ին բալ…`, three English-sample lines, `Քեզ հետ լվում`, `Լա`, `Աասա, Լուսինեն էլ ավտոմատ տառաս…`.
+  - **2 borderline (after-call chat):** `Ձայնս հաճաճելի ա, հաո, իրոք էնքան հաճելի…` was mostly understandable and NLLB had translated it reasonably: a **false positive**. `Ս տեսամեցնում, Շան, …` is half garbled.
+  - **No correct eval or call sentence was flagged.**
+  - **Missed:** garbled lines with confident-looking tokens: `Պարոն Նջելինը` (English sample, −0.18), `Սաթեն՞ք`, and most of the after-call chat, including the line that became a crude sentence in D-021 (−0.18). So this removes the worst invented translations, not all.
+- **Caveat:** thresholds chosen on these same segments, without a held-out set; the challenge-specific eval set (PLAN.md backlog) would give one.
+- 173 unit tests pass.
+
+## D-023 MT repetition guard: looping translations shown as `[unclear]` (Step 8, quality)
+- **Date:** 2026-10-29 · **Status:** verified on tuning data, on held-out eval results and on two sets of new phrases; not yet on a live call.
+- **Where the repetition comes from:** all 201 unique (Armenian, English) pairs in the logged runs were scanned for the longest back-to-back repeat of a word n-gram (n ≤ 4). 8 translations repeat; in **every one the Armenian source has no repetition (×1)**, so the loop is made by NLLB. All but one source are garbled ASR (`Ի ջան, հը լավ գո…` → "yeah" ×8; `…Սոն ա ջան գրիլա Սոնա…` → "sonja" ×5; `Լավան, ինչպես ես…` → "what have you done" ×3; the English sample → "well" ×121, "oh" ×3). The exception is `Շնորհակալություն։` → "Thank you. Thank you." (×2), which the phrasebook now answers.
+- **Choice: a detector, not a decoding change.** `no_repeat_ngram_size`/`repetition_penalty` would change every translation and need a full chrF re-run; a check on the output touches only the looping ones. The length cap (D-020) still bounds the time a loop takes (≈ 3.7 s).
+- **Rule (`armtranslate/mt.py`, `is_degenerate`):** the output is degenerate if some word n-gram (n ≤ 4, case and punctuation ignored) repeats **≥ 3 times in a row** and **≥ 2 times more than any repeat in the Armenian source**. A degenerate output is replaced by `[unclear]` (`unclear_reason` `"mt-repeat"`; ASR-based ones are `"asr"`, D-022, unchanged). Setting `mt.repeat_min_run` (3; `none` = off). Cost: 2.4 ms on the worst case (121 words).
+- **Results, kept apart by how the data was used:**
+  - **Tuning (logged runs, used to design the rule):** 5 of 201 flagged, all loops above (×121, ×8, ×5, ×3, ×3). Not flagged: the ×2 repeats ("Thank you. Thank you.", "you're wrong, you're wrong").
+  - **Held-out 1, eval results** (`eval/results/mt-*.jsonl`: 15 clips × 8 MT configurations × from-reference and from-ASR = 240 outputs; not inspected for repetition before the rule was fixed): **0 flagged** with both versions of the rule. Only ×2 repeats occur.
+  - **Held-out 2, 12 new Armenian phrases with real repetition**, translated with the live settings: the first version (`output > source`) flagged **1 of 12**: `Շնորհակալություն, շնորհակալություն, շատ շնորհակալություն։` → "Thank you, thank you, thank you very much." (source ×2 because `շատ` breaks the run, output ×3) — a false positive. **The margin of 2 was added because of it, so this set then became tuning data.**
+  - **Held-out 3, 10 more new phrases written after that change:** **0 of 10 flagged**, including `Հա, հա, հա` → "Oh, oh, oh, oh" (×3 → ×4) and "Wait, wait, wait, …".
+- **End-to-end:** a 2-clip playback run works (latency max 1.12 s); `summary.json` counts `unclear`.
+- **Limits:** a loop that repeats only twice, or a non-repeating invented sentence, is not caught (that is D-022's job, which also misses some). The garbled source is still shown in Armenian. Real repetition 2+ times longer in English than in Armenian would be wrongly flagged; none seen in 262 held-out outputs.
+- 192 unit tests pass (regression tests: the 5 real loops; 10 valid repetitions, including both margin cases).
