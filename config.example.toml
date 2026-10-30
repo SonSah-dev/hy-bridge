@@ -40,12 +40,15 @@ short_beam_size = 4           # 1-3 word segments not found in the phrasebook (D
 threads = 4
 repeat_min_run = 3            # a phrase repeated 3+ times in a row in the translation (2+ more than in the
                               # Armenian) shows "[unclear]": NLLB looped "well, well, ..." (D-023)
+block_profanity = true        # vulgar English shows "[unclear]": NLLB invented obscenities from
+                              # garbled speech (D-026); real swearing is hidden as well
 
 [text]
 glossary = "glossary.tsv"     # Armenian-letter spellings of terms, fixed before translation; "" = off
 numbers_to_digits = true      # spelled-out numbers >= 10 become digits before translation
 phrasebook = "phrasebook.tsv" # short replies translated directly, not by NLLB; "" = off
 names = "names.tsv"           # people and places -> Latin letters before translation; "" = off
+gazetteer = "gazetteer.tsv"   # places in Armenia, notable people, given names (Wikidata); "" = off
 min_letters = 2               # segments with fewer Armenian letters (noise, "«.") are not shown
 
 [speakers]

@@ -149,3 +149,56 @@ def test_times(asr, fixed):
 def test_textfixer_converts_times_before_numbers():
     assert TextFixer(None)("Ժամը ութն անց երեսուն է։") == "Ժամը 8:30 է։"
     assert TextFixer(None, numbers=False)("ութն անց կես") == "ութն անց կես"
+
+
+@pytest.mark.parametrize("asr, fixed", [
+    ("մոտեցեք ութանց կես։", "մոտեցեք 8:30։"),           # hour glued onto անց (mic test, D-026)
+    ("մոտեցեք ութնանց կես։", "մոտեցեք 8:30։"),
+    ("իննանց քառորդին", "9:15-ին"),
+    ("կանանց կես", "կանանց կես"),                         # "of women": not an hour
+])
+def test_glued_times(asr, fixed):
+    assert times_to_digits(asr) == fixed
+
+
+def test_kog_after_number_is_kg():
+    fix = TextFixer(None)
+    assert fix("980 կոգ։") == "980 կգ։" and fix("Յոթ հարյուր կոգ։") == "700 կգ։"
+    assert fix("կոգ") == "կոգ"                            # only after a number
+
+
+# ----------------------------------------------------------------- gazetteer (D-026)
+from armtranslate.textfix import Gazetteer  # noqa: E402
+
+
+@pytest.fixture
+def gaz(tmp_path):
+    f = tmp_path / "g.tsv"
+    f.write_text("# test\nԴսեղ\tDsegh\tplace\nՀովհաննես Թումանյան\tHovhannes Tumanyan\tperson\n"
+                 "Թումանյան\tTumanyan\tsurname\nՀովհաննես\tHovhannes\tgiven\nԼոռու մարզ\tLori Province\tplace\n"
+                 "Արեւ\tArev\tplace\nԱն\tAn\tplace\n", encoding="utf-8")
+    return Gazetteer(f)
+
+
+@pytest.mark.parametrize("asr, fixed", [
+    ("Թումանյանը ծնվել է Դսեղ գյուղում։", "Թումանյանը ծնվել է Dsegh գյուղում։"),   # first word: skipped
+    ("Մեծ գրող Հովհաննես Թումանյանը ծնվել է։", "Մեծ գրող Hovhannes Tumanyan-ը ծնվել է։"),
+    ("Հովհաննես Թումանյանը ծնվել է։", "Hovhannes Tumanyan-ը ծնվել է։"),           # two words: allowed first
+    ("Ես Լոռու մարզից եմ։", "Ես Lori Province-ից եմ։"),
+    ("Այսօր Արեւը պայծառ է։", "Այսօր Arev-ը պայծառ է։"),                           # capitalised mid-sentence
+    ("Արեւը ծագեց։", "Արեւը ծագեց։"),                                             # sentence start: common word
+    ("այսօր արեւը պայծառ է", "այսօր արեւը պայծառ է"),                             # lower case: never
+    ("Ասաց Ան։", "Ասաց Ան։"),                                                     # under 4 letters
+])
+def test_gazetteer(gaz, asr, fixed):
+    assert gaz(asr) == fixed
+
+
+def test_gazetteer_after_names_and_glossary(tmp_path, gaz):
+    fix = TextFixer(ROOT / "glossary.tsv", names=ROOT / "names.tsv")
+    fix.gazetteer = gaz
+    assert fix("Բարեւ Սաթենիկ ջան, դու Դսեղից ես՞") == "Բարեւ Satenik, դու Dsegh-ից ես՞"
+
+
+def test_gazetteer_off():
+    assert Gazetteer(None)("Ես Դսեղից եմ") == "Ես Դսեղից եմ"

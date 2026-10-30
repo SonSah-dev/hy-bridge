@@ -144,3 +144,12 @@ def test_valid_repetition_is_printed():
                degenerate=is_degenerate)
     r = w.process(Segment("mic", 0, 0, 0, np.zeros(16_000, np.float32)))
     assert r.en == "Yes, yes, yes, I got it." and not r.unclear
+
+
+def test_profane_translation_becomes_unclear():
+    from armtranslate.mt import is_profane
+    w = Worker(lambda s: ("Եղ որդի խճյուղին։", {"mean_logprob": -0.217, "low_share": 0.111}),
+               lambda s: "Be the son of a bitch.", out=io.StringIO(),
+               unclear=lambda text, conf: False, profane=is_profane)
+    r = w.process(Segment("mic", 0, 0, 0, np.zeros(16_000, np.float32)))
+    assert (r.en, r.unclear_reason) == ("[unclear]", "mt-profanity")

@@ -115,3 +115,40 @@ def test_repeat_run():
     assert repeat_run("a b a b a b") == 3
     assert repeat_run("one two three") == 1 and repeat_run("") == 1
     assert repeat_run("Այո, այո") == 2                                     # Armenian words too
+
+
+# ----------------------------------------------------------------- profanity guard (D-026)
+from armtranslate.mt import is_profane  # noqa: E402
+
+
+@pytest.mark.parametrize("en", ["Be the son of a bitch.", "Those are the bastards, you know.",  # real NLLB outputs
+                                "This is shit.", "Fucking hell"])
+def test_profane(en):
+    assert is_profane(en)
+
+
+@pytest.mark.parametrize("en", ["Mr. Shitov arrived.", "Bitcoin is up.", "I'm shipping it.",
+                                "Scunthorpe is a town.", "It's 8:30."])
+def test_not_profane(en):
+    assert not is_profane(en)
+
+
+# ----------------------------------------------------------------- sentence splitting (D-027)
+def test_sentences_are_translated_separately():
+    from armtranslate.mt import SegmentTranslator
+    fake = FakeTranslator()
+    out = SegmentTranslator(fake)("Դա ճիշտ չէ, ես գիտեմ։ Թեեւ ինչ-որ բան գրված է թղթի վրա։")
+    assert [c[0] for c in fake.calls] == ["Դա ճիշտ չէ, ես գիտեմ։", "Թեեւ ինչ-որ բան գրված է թղթի վրա։"]
+    assert out == "MT MT"
+
+
+@pytest.mark.parametrize("text", ["Ժամը 8:30 է, ես կգամ։", "Ես Python-ը գիտեմ. իսկ դու ոչ։"])
+def test_no_split_inside_times_or_before_lower_case(text):
+    from armtranslate.mt import SegmentTranslator
+    fake = FakeTranslator()
+    SegmentTranslator(fake)(text)
+    assert len(fake.calls) == 1
+
+
+def test_bullshit_is_profane():            # FLEURS: "rumors" -> "bullshit" from the correct Armenian
+    assert is_profane("He described the bullshit as political polygamy.")

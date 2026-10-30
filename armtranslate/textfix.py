@@ -247,7 +247,8 @@ def numbers_to_digits(text: str, minimum: int = 10) -> str:
 
 _HOURS = {w: v for w, v in _VALUES.items() if 1 <= v <= 12 and "ու" not in w[1:]}
 _HOURS.update({"երկուս": 2, "տասներկուս": 12, "ինն": 9, "տասն": 10})
-_TIME = re.compile(rf"(?<![{ARM}])([{ARM}]+)\s+անց\s+((?:[{ARM}]+\s+)?[{ARM}]+)(?![{ARM}])", re.IGNORECASE)
+# the ASR often glues the hour onto անց (`ութնանց`, `ութանց`): the space is optional (D-026)
+_TIME = re.compile(rf"(?<![{ARM}])([{ARM}]+?)\s*անց\s+((?:[{ARM}]+\s+)?[{ARM}]+)(?![{ARM}])", re.IGNORECASE)
 
 
 def _hour(word: str) -> int | None:
@@ -296,6 +297,14 @@ def times_to_digits(text: str) -> str:
     return _TIME.sub(repl, text)
 
 
+# The ASR writes the spoken abbreviation "կգ" as `կոգ` (two mic tests, D-026); only after a number.
+_UNIT_AFTER_NUMBER = re.compile(rf"(\d)\s+կոգ(?![{ARM}])", re.IGNORECASE)
+
+
+def units_after_numbers(text: str) -> str:
+    return _UNIT_AFTER_NUMBER.sub(r"\1 կգ", text)
+
+
 _ALPHA = set(re.findall(rf"[{ARM}]", "".join(map(chr, range(0x0531, 0x0588)))))
 
 
@@ -314,10 +323,83 @@ def apply_names(text: str, entries: list[tuple[str, str]]) -> str:
     return _LATIN_THEN_JAN.sub(r"\1", text)
 
 
+# ----------------------------------------------------------------- gazetteer (D-026)
+#
+# Places in Armenia, notable people and given names with their English spellings, from Wikidata
+# (CC0; built by eval/build_gazetteer.py). NLLB mistranslates names it does not know (`Դսեղ` ->
+# "Dusseh", `Հովհաննես Թումանյան` -> "John Tumanyan"). Unlike names.tsv this list is large and
+# not curated, so matching is strict: exact words only, the first word capitalised, an ending
+# allowed on the last word, and a single word must not start the sentence (ordinary words are
+# capitalised there) and must have at least GAZETTEER_MIN_LETTERS letters.
+GAZETTEER_MIN_LETTERS = 4
+_SENTENCE_END = set("։.?!:")
+
+
+def _gkey(word: str) -> str:
+    return word.lower().replace("և", "եւ")
+
+
+class Gazetteer:
+    def __init__(self, path: str | Path | None):
+        self.entries: dict[tuple[str, ...], str] = {}
+        if path:
+            for n, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+                if not line.strip() or line.startswith("#"):
+                    continue
+                parts = line.split("\t")
+                if len(parts) < 2:
+                    raise ValueError(f"{path} line {n}: expected '<Armenian><TAB><English>[<TAB>kind]'")
+                key = tuple(_gkey(w) for w in parts[0].split())
+                self.entries.setdefault(key, parts[1].strip())
+        self.max_words = max((len(k) for k in self.entries), default=0)
+
+    def __call__(self, text: str) -> str:
+        if not self.entries:
+            return text
+        tokens = _TOKEN.findall(text)
+        alpha = [i for i, t in enumerate(tokens) if t[0] in _ALPHA]
+        out, pos, n = [], 0, 0
+        while n < len(alpha):
+            hit = self._match(tokens, alpha, n)
+            if hit is None:
+                n += 1
+                continue
+            used, english, suffix = hit
+            out.extend(tokens[pos:alpha[n]])
+            out.append(english + (f"-{suffix}" if suffix else ""))
+            pos, n = alpha[n + used - 1] + 1, n + used
+        out.extend(tokens[pos:])
+        return "".join(out)
+
+    def _match(self, tokens: list[str], alpha: list[int], n: int) -> tuple[int, str, str] | None:
+        first = tokens[alpha[n]]
+        if not first[0].isupper():
+            return None
+        before = "".join(tokens[:alpha[n]]).rstrip()
+        sentence_start = not before or before[-1] in _SENTENCE_END
+        for size in range(min(self.max_words, len(alpha) - n), 0, -1):
+            span = alpha[n:n + size]
+            if any(not all(tokens[k].isspace() for k in range(a + 1, b)) for a, b in zip(span, span[1:])):
+                continue
+            words = [_gkey(tokens[i]) for i in span]
+            if size == 1 and (sentence_start or len(_letters(words[0])) < GAZETTEER_MIN_LETTERS):
+                continue
+            for suf in ("", *SUFFIXES):
+                last = words[-1]
+                if suf and not (last.endswith(suf) and len(last) > len(suf) + 1):
+                    continue
+                key = tuple(words[:-1]) + (last[: len(last) - len(suf)] if suf else last,)
+                if key in self.entries:
+                    return size, self.entries[key], suf
+        return None
+
+
 class TextFixer:
-    def __init__(self, glossary: str | Path | None, numbers: bool = True, names: str | Path | None = None):
+    def __init__(self, glossary: str | Path | None, numbers: bool = True, names: str | Path | None = None,
+                 gazetteer: str | Path | None = None):
         self.entries = load_glossary(glossary) if glossary else []
         self.names = load_glossary(names) if names else []
+        self.gazetteer = Gazetteer(gazetteer)
         self.numbers = numbers
 
     def __call__(self, text: str) -> str:
@@ -325,6 +407,7 @@ class TextFixer:
             text = apply_glossary(text, self.entries)
         if self.names:
             text = apply_names(text, self.names)
+        text = self.gazetteer(text)                     # after the user's own names list
         if self.numbers:
-            text = numbers_to_digits(times_to_digits(text))
+            text = units_after_numbers(numbers_to_digits(times_to_digits(text)))
         return text

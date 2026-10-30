@@ -86,6 +86,23 @@ class Translator:
         return self._tgt.decode(tokens).strip()
 
 
+# NLLB invented vulgarities from garbled ASR ("Those are the bastards, you know.", "Be the son of a
+# bitch.", D-019/D-026). In an interview a wrong obscenity is the worst error the screen can show,
+# so English output with one of these words is shown as "[unclear]". Real swearing is hidden too.
+_PROFANE = re.compile(r"\b(fuck\w*|motherfuck\w*|shit(?:s|ty|head)?|bullshit\w*|bitch(?:es|y)?|bastards?|assholes?|cunts?|whores?|sluts?)\b",
+                      re.IGNORECASE)
+
+
+def is_profane(output: str) -> bool:
+    return _PROFANE.search(output) is not None
+
+
+# A sentence ends at ։ . ? ! (or the colon FLEURS uses) followed by a space and a capital letter, so
+# "8:30" and abbreviations followed by lower case stay whole. FLEURS: on references with 2+
+# sentences NLLB often translated only the first; splitting raised their chrF 57.6 -> 60.6 (D-027).
+_SENTENCES = re.compile(r"(?<=[։:.?!])\s+(?=[Ա-ՖA-Z])")
+
+
 def _latin_punctuation(text: str) -> str:
     """Armenian punctuation -> English for text shown as is: `Amazon՞։` -> "Amazon?"."""
     question = "՞" in text
@@ -108,6 +125,12 @@ class SegmentTranslator:
         self._words, self._max_words = words, MAX_WORDS
 
     def __call__(self, text: str) -> str:
+        parts = _SENTENCES.split(text.strip())
+        if len(parts) > 1:              # NLLB translates sentence by sentence and drops the rest (D-027)
+            return " ".join(t for t in (self._one(p) for p in parts) if t)
+        return self._one(text)
+
+    def _one(self, text: str) -> str:
         if not self._words(text) and any(ch.isdigit() for ch in text):
             return text.replace("։", ".").strip()     # a bare number: NLLB invents a sentence around it
         ws = self._words(text)

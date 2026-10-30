@@ -2,6 +2,7 @@
 
     python eval/bench_fleurs.py asr            # speech recognition with confidence, cached
     python eval/bench_fleurs.py mt             # translation for each fix variant, cached
+    python eval/bench_fleurs.py mtref          # translation of the reference Armenian (MT ceiling)
     python eval/bench_fleurs.py report         # numbers for DECISIONS.md
 
 Data (CC-BY-4.0, google/fleurs on Hugging Face), git-ignored under eval/audio/fleurs/:
@@ -33,6 +34,7 @@ DATA = ROOT / "eval" / "audio" / "fleurs"
 OUT = ROOT / "eval" / "results"
 ASR_CACHE = OUT / "fleurs-asr.jsonl"
 MT_CACHE = OUT / "fleurs-mt.jsonl"
+MTREF_CACHE = OUT / "fleurs-mtref.jsonl"     # same settings, input = reference text (no ASR errors)
 # The live pipeline is "all"; the others switch one list off at a time (numbers stay on).
 VARIANTS = {"none": (False, False), "glossary": (True, False), "names": (False, True), "all": (True, True)}
 
@@ -111,18 +113,22 @@ def fixers() -> dict:
     return {k: TextFixer(g if use_g else None, True, n if use_n else None) for k, (use_g, use_n) in VARIANTS.items()}
 
 
-def stage_mt(limit: int | None) -> None:
+def stage_mt(limit: int | None, reference: bool = False) -> None:
     from armtranslate.mt import SegmentTranslator, Translator
     from armtranslate.phrasebook import Phrasebook
-    cache = {r["src"]: r for r in read_jsonl(MT_CACHE)}
+    cache_path = MTREF_CACHE if reference else MT_CACHE
+    cache = {r["src"]: r for r in read_jsonl(cache_path)}
     fx = fixers()
     rows = read_jsonl(ASR_CACHE)[:limit]
-    srcs = list(dict.fromkeys(fx[v](r["asr"]) for r in rows for v in VARIANTS))
+    if reference:      # the reference as the live pipeline would see perfect ASR: same fixes
+        srcs = list(dict.fromkeys(fx["all"](r["hy"]) for r in rows))
+    else:
+        srcs = list(dict.fromkeys(fx[v](r["asr"]) for r in rows for v in VARIANTS))
     todo = [s for s in srcs if s not in cache]
     print(f"{len(srcs)} distinct texts, {len(todo)} to translate", flush=True)
     st = SegmentTranslator(Translator("nllb", "int8", threads=4, beam_size=2),
                            Phrasebook(ROOT / "phrasebook.tsv"), 4)
-    with open(MT_CACHE, "a", encoding="utf-8", newline="\n") as f:
+    with open(cache_path, "a", encoding="utf-8", newline="\n") as f:
         for i, s in enumerate(todo, 1):
             t = time.perf_counter()
             en = st(s)
@@ -162,6 +168,12 @@ def report(mean_below: float, low_from: float) -> dict:
                        "bleu": round(sacrebleu.corpus_bleu(hyps, [[r["en"] for r in with_en]]).score, 2),
                        "texts_changed_vs_none": sum(fx[v](r["asr"]) != fx["none"](r["asr"]) for r in rows)}
     out["variants"] = variants
+    ref_mt = {r["src"]: r["en"] for r in read_jsonl(MTREF_CACHE)}
+    hyps = [ref_mt.get(fx["all"](r["hy"])) for r in with_en]
+    if all(h is not None for h in hyps):      # MT ceiling: same pipeline, no recognition errors
+        out["mt_from_reference"] = {
+            "chrf": round(sacrebleu.corpus_chrf(hyps, [[r["en"] for r in with_en]]).score, 2),
+            "bleu": round(sacrebleu.corpus_bleu(hyps, [[r["en"] for r in with_en]]).score, 2)}
     changed = []
     for r in with_en:
         a, b = fx["none"](r["asr"]), fx["all"](r["asr"])
@@ -193,15 +205,15 @@ def report(mean_below: float, low_from: float) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["asr", "mt", "report"])
+    ap.add_argument("stage", choices=["asr", "mt", "mtref", "report"])
     ap.add_argument("--limit", type=int, help="first N clips only")
     ap.add_argument("--unclear", type=float, nargs=2, default=[-0.3, 0.15], metavar=("MEAN", "LOW_SHARE"))
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if args.stage == "asr":
         stage_asr(args.limit)
-    elif args.stage == "mt":
-        stage_mt(args.limit)
+    elif args.stage in ("mt", "mtref"):
+        stage_mt(args.limit, reference=args.stage == "mtref")
     else:
         out = report(*args.unclear)
         (OUT / "fleurs-summary.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")

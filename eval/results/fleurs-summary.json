@@ -9,24 +9,28 @@
  "variants": {
   "none": {
    "chrf": 57.59,
-   "bleu": 30.37,
+   "bleu": 30.38,
    "texts_changed_vs_none": 0
   },
   "glossary": {
    "chrf": 57.62,
-   "bleu": 30.41,
+   "bleu": 30.42,
    "texts_changed_vs_none": 3
   },
   "names": {
-   "chrf": 57.58,
-   "bleu": 30.35,
+   "chrf": 57.59,
+   "bleu": 30.36,
    "texts_changed_vs_none": 1
   },
   "all": {
    "chrf": 57.61,
-   "bleu": 30.4,
+   "bleu": 30.41,
    "texts_changed_vs_none": 4
   }
+ },
+ "mt_from_reference": {
+  "chrf": 60.79,
+  "bleu": 35.5
  },
  "changed_by_lists": [
   {

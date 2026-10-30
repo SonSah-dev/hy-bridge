@@ -55,6 +55,7 @@ class MtConfig:
     threads: int = 4
     repeat_min_run: int | None = 3         # output phrase repeated this often in a row (and 2 more
                                            # than in the source): "[unclear]"; None = off (D-023)
+    block_profanity: bool = True           # vulgar English output -> "[unclear]" (D-026)
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,7 @@ class TextConfig:
     numbers_to_digits: bool = True         # spelled-out numbers >= 10 become digits before MT
     phrasebook: str = "phrasebook.tsv"     # short replies translated directly; "" = off (D-017)
     names: str = "names.tsv"               # names -> Latin letters before MT; "" = off (D-021)
+    gazetteer: str = "gazetteer.tsv"       # Wikidata places/people/given names; "" = off (D-026)
     min_letters: int = 2                   # segments with fewer Armenian letters are not shown
 
 
