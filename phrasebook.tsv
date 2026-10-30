@@ -36,3 +36,16 @@
 մամա	Mom.
 պապ	Dad.
 պապա	Dad.
+# units on their own (D-025): NLLB turned "Կգ" into "What are you doing here?"
+կգ	kg.
+կիլոգրամ	Kilogram.
+գրամ	Gram.
+կմ	km.
+կիլոմետր	Kilometre.
+մետր	Metre.
+սմ	cm.
+մմ	mm.
+տոկոս	Percent.
+դրամ	Dram.
+դոլար	Dollar.
+եվրո	Euro.

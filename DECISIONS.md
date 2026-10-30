@@ -471,3 +471,21 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **MT time:** median 0.99 s, p95 1.82 s, p99 2.76 s; whole 30 s clips (124 tokens) took 4.7 s, which the live 8 s forced cut avoids. **One outlier: 49.1 s** for a 42-token sentence that re-runs in 0.9–1.4 s with identical output. Windows logged Modern Standby entries/exits (Kernel-Power 506/507) during the run, so standby is the likely cause (not proven to the second). **For the interview: mains power, and sleep/standby off.**
 - **Conclusion:** the general mechanisms (numbers, phrasebook, `[unclear]`, repetition guard) show no harm on held-out data. The glossary and names lists have no measurable average effect on general text and produced 2 false matches in 350 sentences; their benefit for interview vocabulary is still unmeasured. Treat them as preparation aids, kept exact or close to it.
 - 193 unit tests pass.
+
+## D-025 Bare names and units shown as is; spoken clock times as digits
+- **Date:** 2026-10-30 · **Status:** verified by replaying the developer's mic test (`runs/20261030-214321`), all logged texts and the FLEURS ASR output; not yet on a live call.
+- **Mic test (2.5 min, mic only, no call audio):** latency p50 1.45 s, p95 1.66 s, max 1.68 s. Names, places and full sentences were right ("Hello, Satenik.", "Vanadzor is quite far away.", "Sona is late for the meeting.", "The capital of Armenia is Yerevan."). Problems:
+  1. A segment that is only a name: `Սաթենիկ ջան։` → (names list) `Satenik։` → NLLB **"What is it?"**. Probe: `Satenik, Sona։` → "Satenik, Sona. What are you doing?"; `Python։` → "This is Python."
+  2. A unit alone: `Կգ։` → **"What are you doing here?"**; probe: `կմ։` → "What is this?", `Տոկոս։` → "What is it?".
+  3. Clock times: NLLB misreads spoken forms (`Ժամը ութն անց կես է։` → "It's after eight and a half.") but reads digits (`Ժամը 8:30 է։` → "It's 8:30."; `ժամը 8:30-ին կհանդիպենք` → "I'll see you at 8:30.").
+  4. The ASR garbled "eight" in every time phrase of the test (`Ուութթն է`, `Ուսնանց երեսոուն`, `Ուութթանց կես`). Two of these were confident enough to pass `[unclear]` and became "I'm going to teach you something." and "Halfway through Watson.". **Not fixed**: this is recognition, which a text rule cannot repair.
+- **Changes:**
+  - `SegmentTranslator`: a segment whose words are all Latin (names or terms already replaced) is shown as is, not translated; Armenian punctuation becomes English (`Amazon՞։` → "Amazon?").
+  - `phrasebook.tsv`: common units on their own (կգ, կմ, սմ, մմ, կիլոգրամ, կիլոմետր, մետր, գրամ, տոկոս, դրամ, դոլար, եվրո).
+  - `textfix.times_to_digits` (with `text.numbers_to_digits`): `<hour 1–12, with the connective ն/ը> անց <կես | քառորդ | minutes in words>` → `H:MM`; an `-ին` ending on the minutes is kept (`9:15-ին`). Garbled hours and other uses of `անց` ("three days later") are left alone.
+- **Replay:**
+  - Mic test: `Սաթենիկ ջան։` → "Satenik."; `Կգ։` → "kg.". The garbled times stay wrong (item 4).
+  - All 211 logged and eval texts: the time rule changes 1 (eval clip mic-07, `Ինն անց կես` → 9:30, correct); the Latin pass-through changes 2 (`Ամազո՞։` → "Amazon?", previously "What about Amazon?" from MT; `Վժըն քընթռոլ։` → "version control."); units 0.
+  - FLEURS ASR (822 texts, held out): the time rule changes 1, correctly (`տասնմեկ անց երեսունհինգ րոպե` → 11:35; translation "…by 11:35", reference "by 11:35 pm"); pass-through and units 0.
+- **Open:** `Մոտակա է։` ("it's nearby") was shown as `[unclear]` (mean −0.265, unsure share 0.167). If that is what was said, it is a false alarm, the first one seen on clear speech; the developer is asked to confirm before any threshold change.
+- 211 unit tests pass.

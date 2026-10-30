@@ -238,6 +238,64 @@ def numbers_to_digits(text: str, minimum: int = 10) -> str:
     return "".join(out)
 
 
+# ----------------------------------------------------------------- clock times (D-025)
+#
+# NLLB reads spoken times badly (`ութն անց կես` -> "after eight and a half") but digits well
+# (`Ժամը 8:30 է` -> "It's 8:30."). `<hour> անց <minutes>` becomes H:MM. The hour takes the
+# connective ն/ը (ութն, ինն, տասն); minutes are կես (30), քառորդ (15) or number words; an ending
+# -ին ("at") on the minutes is kept as in written Armenian (8:30-ին). Garbled hours are left alone.
+
+_HOURS = {w: v for w, v in _VALUES.items() if 1 <= v <= 12 and "ու" not in w[1:]}
+_HOURS.update({"երկուս": 2, "տասներկուս": 12, "ինն": 9, "տասն": 10})
+_TIME = re.compile(rf"(?<![{ARM}])([{ARM}]+)\s+անց\s+((?:[{ARM}]+\s+)?[{ARM}]+)(?![{ARM}])", re.IGNORECASE)
+
+
+def _hour(word: str) -> int | None:
+    w = word.lower()
+    for cand in (w, w[:-1] if w[-1:] in "նը" else None, w[:-1] + "ը" if w.endswith("ն") else None):
+        if cand and cand in _HOURS:
+            return _HOURS[cand]
+    return None
+
+
+def _minutes(words: str) -> tuple[int, str] | None:
+    ws = words.lower().split()
+    ending = ""
+    for suf in ("ին", "ը"):
+        if ws[-1].endswith(suf) and len(ws[-1]) > len(suf) + 1:
+            base = ws[-1][: -len(suf)]
+            if base in ("կես", "քառորդ") or canonical(base) or canonical(base + "ը"):
+                ws[-1], ending = base, suf
+                break
+    if ws == ["կես"]:
+        return 30, ending
+    if ws == ["քառորդ"]:
+        return 15, ending
+    canon = [canonical(w) or canonical(w + "ը") for w in ws]
+    if None in canon:
+        return None
+    parsed = _parse(canon)
+    if parsed and parsed[1] == len(canon) and 1 <= parsed[0] <= 59:
+        return parsed[0], ending
+    return None
+
+
+def times_to_digits(text: str) -> str:
+    def repl(m: re.Match) -> str:
+        h = _hour(m.group(1))
+        words, rest = m.group(2), ""
+        mins = _minutes(words)
+        if mins is None and " " in words.strip():          # "կես է": only the first word is minutes
+            first, sep, rest = words.partition(" ")
+            words, rest = first, sep + rest
+            mins = _minutes(words)
+        if h is None or mins is None:
+            return m.group(0)
+        value, ending = mins
+        return f"{h}:{value:02d}" + ("-ին" if ending == "ին" else "") + rest
+    return _TIME.sub(repl, text)
+
+
 _ALPHA = set(re.findall(rf"[{ARM}]", "".join(map(chr, range(0x0531, 0x0588)))))
 
 
@@ -268,5 +326,5 @@ class TextFixer:
         if self.names:
             text = apply_names(text, self.names)
         if self.numbers:
-            text = numbers_to_digits(text)
+            text = numbers_to_digits(times_to_digits(text))
         return text

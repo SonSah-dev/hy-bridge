@@ -20,6 +20,8 @@ PB = Phrasebook(ROOT / "phrasebook.tsv")
     ("Բարև ձեզ", "Hello."),
     ("Ողջույն Սոնաջան։", "Hello, Sona."),                 # ջան glued on by the ASR
     ("Առայժմ Satenik։", "Bye for now, Satenik."),       # name already in Latin (names.tsv)
+    ("Կգ։", "kg."),                                     # unit alone; NLLB invented a question (D-025)
+    ("Տոկոս։", "Percent."),
 ])
 def test_lookup(hy, en):
     assert PB.lookup(hy) == en

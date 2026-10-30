@@ -124,3 +124,28 @@ def test_held_out_false_matches_are_blocked():          # FLEURS test split (D-0
     assert apply_glossary("Լայթեն վարչապետի հետ", GLOSSARY) == "Լայթեն վարչապետի հետ"   # Layton, not Python
     assert apply_names("ինչպես լուսինն է ձգողության", NAMES) == "ինչպես լուսինն է ձգողության"  # the moon
     assert apply_names("Լուսինն էլ", NAMES) == "Lusine էլ"                              # capitalised: a name
+
+
+# ----------------------------------------------------------------- clock times (D-025)
+from armtranslate.textfix import times_to_digits  # noqa: E402
+
+
+@pytest.mark.parametrize("asr, fixed", [
+    ("Ժամը ութն անց կես է։", "Ժամը 8:30 է։"),
+    ("ութն անց երեսուն", "8:30"),
+    ("ութն անց երեսուն երկու", "8:32"),
+    ("Ժամը ինն անց քառորդին կհանդիպենք։", "Ժամը 9:15-ին կհանդիպենք։"),
+    ("տասներկուսն անց տասը", "12:10"),
+    ("մեկն անց կեսին", "1:30-ին"),
+    ("երեք օր անց", "երեք օր անց"),                      # "three days later": not a time
+    ("երկու ժամ անց կգամ", "երկու ժամ անց կգամ"),
+    ("նա անց կացրեց", "նա անց կացրեց"),
+    ("Ուութթանց կես։", "Ուութթանց կես։"),                 # garbled hour (live run): left alone
+])
+def test_times(asr, fixed):
+    assert times_to_digits(asr) == fixed
+
+
+def test_textfixer_converts_times_before_numbers():
+    assert TextFixer(None)("Ժամը ութն անց երեսուն է։") == "Ժամը 8:30 է։"
+    assert TextFixer(None, numbers=False)("ութն անց կես") == "ութն անց կես"

@@ -109,6 +109,8 @@ Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/sil
 
 **Names:** add the names of everyone in the interview, and places you expect, to [names.tsv](names.tsv) with their Latin spelling (`Սաթենիկ` → `Satenik`). The translation model keeps Latin names but turns many Armenian-letter names into words ("Satan", "Lune"). Endings are kept (`Satenik-ի`), and `ջան` after a name is dropped. Names of 6+ letters also match one-letter misspellings; for shorter ones, add the variants the ASR produces as extra lines (D-021).
 
+**Times and bare names:** spoken clock times (`ութն անց կես`) are turned into digits (8:30) before translation, and a line that is only names (`Satenik`) or a unit (`կգ`) is shown as is, because the model invents a question around them (D-025).
+
 **Phrasebook:** short replies (1–3 words) are looked up in [phrasebook.tsv](phrasebook.tsv) before translation, because the translation model often invents sentences for very short inputs. A greeting followed by a name keeps the name in Latin letters (`Ողջույն Սոնա ջան` → "Hello, Sona."). Add the short replies you expect.
 
 **Power:** keep the laptop plugged in, and turn off sleep and Modern Standby for the session: one translation took 49 s instead of about 1 s while Windows entered standby (D-024). On battery, speech recognition and translation ran about twice as slowly (D-017).

@@ -86,6 +86,14 @@ class Translator:
         return self._tgt.decode(tokens).strip()
 
 
+def _latin_punctuation(text: str) -> str:
+    """Armenian punctuation -> English for text shown as is: `Amazon՞։` -> "Amazon?"."""
+    question = "՞" in text
+    out = text.replace("՞", "").replace("՛", "").replace("՜", "").replace("՝", ",").strip()
+    out = out.rstrip("։.:")
+    return out + ("?" if question else ".")
+
+
 class SegmentTranslator:
     """MT for one pipeline segment, with special handling for short replies (D-017).
 
@@ -102,6 +110,9 @@ class SegmentTranslator:
     def __call__(self, text: str) -> str:
         if not self._words(text) and any(ch.isdigit() for ch in text):
             return text.replace("։", ".").strip()     # a bare number: NLLB invents a sentence around it
+        ws = self._words(text)
+        if ws and all(w.isascii() for w in ws):        # only names/terms already in Latin (D-025):
+            return _latin_punctuation(text)           # NLLB turned "Satenik։" into "What is it?"
         if self.phrasebook is not None:
             hit = self.phrasebook.lookup(text)
             if hit is not None:

@@ -49,6 +49,25 @@ def test_bare_number_not_sent_to_mt():
     assert SegmentTranslator(fake)("13840։") == "13840." and fake.calls == []
 
 
+@pytest.mark.parametrize("text, shown", [
+    ("Satenik։", "Satenik."),                                  # NLLB: "What is it?" (D-025)
+    ("Satenik, Sona։", "Satenik, Sona."),
+    ("Python։", "Python."),
+    ("Amazon՞։", "Amazon?"),                                  # Armenian question mark (live run)
+])
+def test_latin_only_not_sent_to_mt(text, shown):
+    from armtranslate.mt import SegmentTranslator
+    fake = FakeTranslator()
+    assert SegmentTranslator(fake)(text) == shown and fake.calls == []
+
+
+def test_latin_name_inside_armenian_still_translated():
+    from armtranslate.mt import SegmentTranslator
+    fake = FakeTranslator()
+    SegmentTranslator(fake)("Sona-ն ուշացել է հանդիպումից։")
+    assert fake.calls                                          # has Armenian words: goes to MT
+
+
 # ----------------------------------------------------------------- repetition guard (D-023)
 from armtranslate.mt import is_degenerate, repeat_run  # noqa: E402
 
