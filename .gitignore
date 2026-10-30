@@ -32,3 +32,4 @@ exports/
 
 # Pipeline run logs (contain transcripts of real speech)
 runs/
+eval/results/fleurs-*.jsonl

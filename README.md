@@ -111,4 +111,4 @@ Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/sil
 
 **Phrasebook:** short replies (1–3 words) are looked up in [phrasebook.tsv](phrasebook.tsv) before translation, because the translation model often invents sentences for very short inputs. A greeting followed by a name keeps the name in Latin letters (`Ողջույն Սոնա ջան` → "Hello, Sona."). Add the short replies you expect.
 
-**Power:** keep the laptop plugged in. On battery, speech recognition and translation ran about twice as slowly (D-017).
+**Power:** keep the laptop plugged in, and turn off sleep and Modern Standby for the session: one translation took 49 s instead of about 1 s while Windows entered standby (D-024). On battery, speech recognition and translation ran about twice as slowly (D-017).

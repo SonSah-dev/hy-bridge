@@ -454,3 +454,20 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **End-to-end:** a 2-clip playback run works (latency max 1.12 s); `summary.json` counts `unclear`.
 - **Limits:** a loop that repeats only twice, or a non-repeating invented sentence, is not caught (that is D-022's job, which also misses some). The garbled source is still shown in Armenian. Real repetition 2+ times longer in English than in Armenian would be wrongly flagged; none seen in 262 held-out outputs.
 - 192 unit tests pass (regression tests: the 5 real loops; 10 valid repetitions, including both margin cases).
+
+## D-024 Held-out check on FLEURS Armenian (test split)
+- **Date:** 2026-10-30 · **Status:** measured. Data: Google FLEURS `hy_am` test split (CC-BY-4.0; 932 clips, 350 sentences, 3.0 h, read Wikipedia sentences), English references from the matching `en_us` rows. Audio is git-ignored under `eval/audio/fleurs/`; per-clip results are git-ignored (`eval/results/fleurs-*.jsonl`); `eval/results/fleurs-summary.json` holds the numbers and the changed sentences (FLEURS text, CC-BY-4.0, Google). Script: `eval/bench_fleurs.py`.
+- **Why it counts as held out:** nothing in the glossary, names list, phrasebook, `[unclear]` thresholds or repetition guard was tuned on it, and FastConformer was trained on FLEURS *train*, not test. Whole clips (up to 33 s) were recognised, without the live VAD cuts. **Limit:** read speech, not conversation; few of the terms and names the lists target.
+- **ASR:** CER **2.8%**, WER 10.5% (D-013 mic clips: 8.2% / 18.9%), RTF 0.029, slowest clip 1.15 s for 33 s. Worst clip CER 28%, mostly spoken digits (`802.11n` → "ութ հարյուր երկու կետ տասնմեկ").
+- **`[unclear]` (D-022): 0 of 932 flagged.** Least confident clip mean −0.144 (1st percentile; the cut-off is −0.3); largest unsure-token share 0.114 (cut-off 0.15). Confidence correlates with CER (r = −0.41). **No false alarms on clean speech; recall on garbled speech cannot be measured here** (no clip above 28% CER).
+- **Repetition guard (D-023): 0 flagged** among 823 distinct translations.
+- **Glossary and names lists:** they fire on **4 distinct sentences** of 350 (before the fix below):
+  - `ամազոնից` → Amazon (the river): correct; chrF 52.9 → 65.1 and 55.4 → 63.2.
+  - `Սուրբ Մարիամի` → "Saint Mariam" instead of "Mary": chrF 49.9 → 41.8.
+  - **False match, glossary:** `Լայթեն` (the name Layton) → **Python**, a one-letter fuzzy match against `փայթեն` with a different first letter.
+  - **False match, names:** `լուսինն` ("the moon") → **Lusine**, a fuzzy match of a lowercase noun.
+  - Corpus chrF: none 57.59, glossary 57.62, names 57.58, both 57.61, i.e. **no measurable effect** on general text. They neither help nor hurt on average; the risk is the individual false match.
+- **Fix (`armtranslate/textfix.py`):** a fuzzy glossary match must keep the first letter (multi-word entries already had this rule), and a fuzzy *name* match must be capitalised. Exact matches are unchanged. Both FLEURS false matches are now regression tests, **so these sentences are now tuning data.** Replaying the 211 logged live texts: the tightening loses one earlier correct fix, the lowercase misspelling `սաթեմիկի` (Satenik). After the fix, 4 → 3 FLEURS sentences change (both false matches gone).
+- **MT time:** median 0.99 s, p95 1.82 s, p99 2.76 s; whole 30 s clips (124 tokens) took 4.7 s, which the live 8 s forced cut avoids. **One outlier: 49.1 s** for a 42-token sentence that re-runs in 0.9–1.4 s with identical output. Windows logged Modern Standby entries/exits (Kernel-Power 506/507) during the run, so standby is the likely cause (not proven to the second). **For the interview: mains power, and sleep/standby off.**
+- **Conclusion:** the general mechanisms (numbers, phrasebook, `[unclear]`, repetition guard) show no harm on held-out data. The glossary and names lists have no measurable average effect on general text and produced 2 false matches in 350 sentences; their benefit for interview vocabulary is still unmeasured. Treat them as preparation aids, kept exact or close to it.
+- 195 unit tests pass.
