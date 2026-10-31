@@ -124,6 +124,8 @@ Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/sil
 
 **Gazetteer (off by default):** `gazetteer.tsv`, built from Wikidata with `python eval/build_gazetteer.py`, gives the English spelling of places in Armenia, Armenian people and given names, matched strictly after `names.tsv` (D-026). With the 1.3B model it brought no measurable gain on FLEURS, so it is off; `--set text.gazetteer=gazetteer.tsv` turns it on (D-028).
 
+**Echo (shadow mode, logs only):** with speakers instead of headphones the microphone hears the call, and the echo prints as `Me` lines of invented text. Each `Me` segment is compared with the call audio: how much it overlaps the call's speech, how loud it is relative to the call, how closely its spectrogram matches the call at a delay of up to 800 ms, and how much mic speech falls while the call is silent. Segments that look like echo get `"echo_suspect": true` in `segments.jsonl`, with the measurements under `echo`; `summary.json` → `echo_suspect` counts them. **Nothing is hidden:** every line still prints. Settings in `[echo]` (`echo.enabled=false` turns the measuring off) (D-030). Known limit: a soft interruption by you while the call is talking loudly can look like echo, so this stays log-only until checked on more calls. Headphones remain the fix.
+
 **Currency:** `դրամ` right after a number is written as `AMD` before translation, because the model renders the Armenian dram as "drachmas" (D-029).
 
 **Times and bare names:** spoken clock times (`ութն անց կես`) are turned into digits (8:30) before translation, and a line that is only names (`Satenik`) or a unit (`կգ`) is shown as is, because the model invents a question around them (D-025).

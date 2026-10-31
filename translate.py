@@ -160,11 +160,15 @@ def main() -> int:
         for name, what in inputs.items():
             label = "Speaker N" if name == "system" and speakers else LABELS[name]
             print(f"{label:>9} <- {name}: {what}", file=sys.stderr)
+        echo = None
+        if cfg.echo.enabled and {"mic", "system"} <= sources.keys():    # shadow mode, logged only (D-030)
+            from armtranslate.echo import EchoDetector
+            echo = EchoDetector(cfg.echo)
         print("listening  (Ctrl+C to stop)", file=sys.stderr)
         stop = threading.Event()
         if args.seconds:
             threading.Timer(args.seconds, stop.set).start()
-        run(sources, segmenters, worker, stop)
+        run(sources, segmenters, worker, stop, echo=echo)
     finally:
         log.close()
         if p is not None:
@@ -174,6 +178,7 @@ def main() -> int:
                "by_source": {n: latency_summary([r for r in worker.results if r.source == n]) for n in sources},
                "dropped_short": {n: s.dropped_short for n, s in segmenters.items()},
                "skipped_no_text": worker.skipped,
+               "echo_suspect": _echo_summary(worker.results),
                "speakers": _speaker_summary(worker.results, speakers),
                "source_stats": {n: s.stats() for n, s in sources.items()}}
     (run_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -190,6 +195,15 @@ def _speaker_summary(results, speakers) -> dict | None:
     return {"labels": dict(sorted(Counter(r.label for r in sys_res).items())),
             "decisions": dict(Counter(r.speaker["decision"] for r in sys_res if r.speaker)),
             "segments_per_speaker": speakers.tracker.counts}
+
+
+def _echo_summary(results) -> dict | None:
+    mic = [r for r in results if r.echo is not None]
+    if not mic:
+        return None
+    return {"measured": len(mic), "suspect": sum(bool(r.echo_suspect) for r in mic),
+            "suspect_at": [round(r.t_start - results[0].t_start, 1) for r in mic if r.echo_suspect],
+            "max_wait_s": max(r.echo.get("wait_s", 0.0) for r in mic)}
 
 
 def _concat_wavs(paths: list[str], gap_s: float, run_dir: Path, name: str) -> FileSource:
