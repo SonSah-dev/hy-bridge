@@ -25,10 +25,11 @@ All settings and test assumptions are listed, with their defaults, in [config.ex
 | audio | `use_mic`, `use_system` | `true`, `true` | which sources to capture (`--no-mic`, `--no-system`) |
 | audio | `mic_device`, `system_device` | `default` | index, name substring or `default` |
 | audio | `fill_gaps`, `gap_threshold_ms` | `true`, 200 | loopback sends no data while nothing plays; gaps longer than this are filled with silence |
-| segmentation | `end_pause_ms`, `max_segment_s` | 1000, 8.0 | end-of-phrase pause; forced cut (placed at the quietest point of the last 1.5 s) |
+| segmentation | `end_pause_ms`, `max_segment_s` | 1000, 6.0 | end-of-phrase pause; forced cut (placed at the quietest point of the last 1.5 s) |
 | segmentation | `vad_threshold`, `pre_roll_ms`, `min_speech_ms` | 0.5, 200, 250 | Silero speech probability; audio kept before onset; shorter bursts dropped |
 | asr | `threads` | 2 | FastConformer threads (D-013) |
 | mt | `family`, `compute`, `size`, `no_repeat_ngram`, `beam_size`, `threads` | nllb, int8, 1.3b, 4, 2, 4 | translation model and speed (D-015, D-028) |
+| mt | `deadline_s`, `fallback_size` | 4.5, 600m | a translation predicted to finish later than this after the speech goes to the faster model (D-031) |
 | text | `glossary`, `numbers_to_digits` | glossary.tsv, true | fixes applied to the Armenian text before translation (D-016) |
 | text | `phrasebook`, `min_letters` | phrasebook.tsv, 2 | short replies translated directly; shorter noise segments hidden (D-017) |
 | mt | `short_beam_size` | 4 | beam for 1–3 word segments not in the phrasebook (D-017) |
@@ -67,6 +68,8 @@ Armenian → English uses NLLB-200 distilled **1.3B** (**CC-BY-NC-4.0, non-comme
 python -c "from huggingface_hub import snapshot_download; snapshot_download('OpenNMT/nllb-200-distilled-1.3B-ct2-int8', local_dir='models/nllb-1.3b-ct2-int8')"
 copy models\nllb-600m-ct2-int8\sentencepiece.bpe.model models\nllb-1.3b-ct2-int8\
 ```
+
+**Deadline fallback (D-031):** the 600M is loaded as well. The 1.3B's speed is measured on every translation; when a long segment would not be translated within `mt.deadline_s` (4.5 s) of the end of speech, the 600M translates it instead (`mt_fallback` in `segments.jsonl`). On a normal day this does not happen for live segments; it is a guard for a slow CPU. `--set mt.deadline_s=none` switches it off.
 
 `--set mt.size=600m` goes back to the 600M model. The permissive alternative `Helsinki-NLP/opus-mt-hy-en` (Apache-2.0) was measured and is clearly weaker. Models are converted once from the official repos into `models/`. Conversion needs `torch` and `transformers`; running the models does not. The commands are in [eval/bench_mt.py](eval/bench_mt.py).
 

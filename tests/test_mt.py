@@ -152,3 +152,89 @@ def test_no_split_inside_times_or_before_lower_case(text):
 
 def test_bullshit_is_profane():            # FLEURS: "rumors" -> "bullshit" from the correct Armenian
     assert is_profane("He described the bullshit as political polygamy.")
+
+
+class FakeTimed(FakeTranslator):
+    """Predicts a fixed number of seconds for any text (None = speed not measured yet)."""
+
+    def __init__(self, need, out="MT"):
+        super().__init__()
+        self.need, self.out = need, out
+
+    def predict_s(self, text):
+        return self.need
+
+    def translate(self, text, beam_size=None):
+        super().translate(text, beam_size)
+        return self.out
+
+
+LONG_HY = "Հիմա պետք է դրա վրա աշխատեմ, ինձ էր պետք տեսնել, որ ինքը չունի իր բանի մեջ։"
+
+
+@pytest.mark.parametrize("need, budget, expected", [
+    (3.0, 4.0, "BIG"),      # fits: the main model
+    (3.0, 2.0, "SMALL"),    # would miss the deadline: the fallback
+    (3.0, None, "BIG"),     # no deadline given
+    (None, 0.5, "BIG"),     # speed not measured yet
+])
+def test_deadline_picks_model(need, budget, expected):
+    from armtranslate.mt import SegmentTranslator
+    st = SegmentTranslator(FakeTimed(need, "BIG"), fallback=FakeTimed(None, "SMALL"))
+    assert st(LONG_HY, budget_s=budget) == expected
+    assert st.used_fallback == (expected == "SMALL")
+
+
+def test_deadline_without_fallback_keeps_main_model():
+    from armtranslate.mt import SegmentTranslator
+    st = SegmentTranslator(FakeTimed(9.0, "BIG"))
+    assert st(LONG_HY, budget_s=1.0) == "BIG" and not st.used_fallback
+
+
+def test_short_input_stays_on_main_model():           # 1-3 words: fast, and they use the wider beam
+    from armtranslate.mt import SegmentTranslator
+    st = SegmentTranslator(FakeTimed(9.0, "BIG"), fallback=FakeTimed(None, "SMALL"))
+    assert st("Լավ, գնացինք։", budget_s=1.0) == "BIG" and not st.used_fallback
+
+
+def test_used_fallback_resets_each_call():
+    from armtranslate.mt import SegmentTranslator
+    st = SegmentTranslator(FakeTimed(3.0, "BIG"), fallback=FakeTimed(None, "SMALL"))
+    st(LONG_HY, budget_s=1.0)
+    st(LONG_HY, budget_s=10.0)
+    assert not st.used_fallback
+
+
+class _Pieces:
+    def encode(self, text, out_type=str):
+        return text.split()
+
+    def decode(self, tokens):
+        return " ".join(tokens)
+
+
+def _bare_translator(seconds_per_call):
+    """A Translator without a model: decoding just takes `seconds_per_call` (a fake clock step)."""
+    import armtranslate.mt as mt
+    tr = Translator.__new__(Translator)
+    tr.family, tr.beam_size, tr.no_repeat_ngram, tr.s_per_piece = "opus", 2, 0, None
+    tr._src = tr._tgt = _Pieces()
+    tr._decode = lambda pieces, beam: (setattr(tr, "_now", tr._now + seconds_per_call), "EN")[1]
+    tr._now = 0.0
+    return tr, mt
+
+
+def test_speed_model_learns_from_default_beam_only(monkeypatch):
+    tr, mt = _bare_translator(1.6)
+    monkeypatch.setattr(mt.time, "perf_counter", lambda: tr._now)
+    assert tr.predict_s("a b c") is None
+    tr.translate("a b c d", beam_size=4)                   # short-input beam: not learned
+    assert tr.s_per_piece is None
+    tr.translate("a b c d")                                # 1.6 s for 4 + SPEED_EXTRA tokens
+    assert tr.s_per_piece == pytest.approx(1.6 / (4 + mt.SPEED_EXTRA))
+    assert tr.predict_s("a b c d") == pytest.approx(mt.SPEED_SAFETY * 1.6)
+    tr._decode = lambda pieces, beam: (setattr(tr, "_now", tr._now + 3.2), "EN")[1]
+    tr.translate("a b c d")                                # twice as slow: moving average follows
+    assert tr.s_per_piece == pytest.approx((1 - mt.SPEED_ALPHA) * 0.2 + mt.SPEED_ALPHA * 0.4)
+    tr.calibrate("a b c d")                                # start-up: forget the warm-up calls
+    assert tr.s_per_piece == pytest.approx(0.4)

@@ -2,6 +2,7 @@ import io
 import json
 
 import numpy as np
+import pytest
 
 from armtranslate.config import SegmentationConfig
 from armtranslate.evalset import write_wav
@@ -153,3 +154,28 @@ def test_profane_translation_becomes_unclear():
                unclear=lambda text, conf: False, profane=is_profane)
     r = w.process(Segment("mic", 0, 0, 0, np.zeros(16_000, np.float32)))
     assert (r.en, r.unclear_reason) == ("[unclear]", "mt-profanity")
+
+
+class BudgetTranslate:
+    def __init__(self, fallback):
+        self.budgets, self.fallback, self.used_fallback = [], fallback, False
+
+    def __call__(self, text, budget_s=None):
+        self.budgets.append(budget_s)
+        self.used_fallback = self.fallback
+        return "EN"
+
+
+def test_deadline_budget_passed_to_mt_and_fallback_logged():
+    clock = iter([100.0, 100.6, 102.0])                 # dequeue, budget computed, printed
+    mt = BudgetTranslate(fallback=True)
+    w = Worker(lambda s: "Բարեւ", mt, out=io.StringIO(), clock=lambda: next(clock), mt_deadline_s=4.5)
+    seg = Segment("mic", t_start=92.0, t_last_voice=100.0, t_emit=100.0, samples=np.zeros(16_000, np.float32))
+    r = w.process(seg)
+    assert mt.budgets == [pytest.approx(3.9)] and r.mt_fallback
+
+
+def test_no_deadline_calls_mt_without_budget():
+    w = Worker(lambda s: "Բարեւ", lambda s: "EN", out=io.StringIO())
+    seg = Segment("mic", t_start=92.0, t_last_voice=100.0, t_emit=100.0, samples=np.zeros(16_000, np.float32))
+    assert not w.process(seg).mt_fallback

@@ -52,7 +52,7 @@ def test_long_gap_splits():
 def test_forced_cut_at_max_segment():
     segs, _ = run([(0.5, 20.0)], 22.0)
     assert [s.forced for s in segs][:2] == [True, True]
-    assert all(s.duration_s <= 8.0 + CHUNK_S for s in segs)
+    assert all(s.duration_s <= SegmentationConfig().max_segment_s + CHUNK_S for s in segs)
     assert sum(s.duration_s for s in segs) == pytest.approx(19.5 + 0.2, abs=0.5)
 
 
@@ -74,7 +74,7 @@ def test_frames_not_multiple_of_chunk():
 
 def test_forced_cut_lands_in_a_dip():
     # continuous speech except a 0.2 s dip at 7.4 s; the cut at 8.3 s (incl. pre-roll) moves back to it
-    segs, _ = run([(0.5, 7.4), (7.6, 12.0)], 14.0)
+    segs, _ = run([(0.5, 7.4), (7.6, 12.0)], 14.0, SegmentationConfig(max_segment_s=8.0))
     first = segs[0]
     assert first.forced
     assert first.t_start + first.duration_s - 1000 == pytest.approx(7.5, abs=0.1)
