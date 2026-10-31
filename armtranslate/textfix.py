@@ -301,8 +301,14 @@ def times_to_digits(text: str) -> str:
 _UNIT_AFTER_NUMBER = re.compile(rf"(\d)\s+կոգ(?![{ARM}])", re.IGNORECASE)
 
 
+# NLLB translates the Armenian currency դրամ as "drachma(s)" ("Coffee costs 500 drachmas") but keeps
+# "AMD" ("costs 500 AMD"). Only directly after a number: on its own դրամ also means "money" (D-029).
+_DRAM_AFTER_NUMBER = re.compile(rf"(\d)\s+դրամ({'|'.join(SUFFIXES)})?(?![{ARM}])", re.IGNORECASE)
+
+
 def units_after_numbers(text: str) -> str:
-    return _UNIT_AFTER_NUMBER.sub(r"\1 կգ", text)
+    text = _UNIT_AFTER_NUMBER.sub(r"\1 կգ", text)
+    return _DRAM_AFTER_NUMBER.sub(lambda m: f"{m.group(1)} AMD" + (f"-{m.group(2)}" if m.group(2) else ""), text)
 
 
 _ALPHA = set(re.findall(rf"[{ARM}]", "".join(map(chr, range(0x0531, 0x0588)))))
