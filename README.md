@@ -25,15 +25,21 @@ All settings and test assumptions are listed, with their defaults, in [config.ex
 | audio | `use_mic`, `use_system` | `true`, `true` | which sources to capture (`--no-mic`, `--no-system`) |
 | audio | `mic_device`, `system_device` | `default` | index, name substring or `default` |
 | audio | `fill_gaps`, `gap_threshold_ms` | `true`, 200 | loopback sends no data while nothing plays; gaps longer than this are filled with silence |
+| audio | `sample_rate`, `block_ms`, `queue_seconds` | 16000, 20, 10.0 | pipeline format (mono float32); capture callback size; audio buffered per source before chunks are dropped |
 | segmentation | `end_pause_ms`, `max_segment_s` | 1000, 6.0 | end-of-phrase pause; forced cut (placed at the quietest point of the last 1.5 s) |
 | segmentation | `vad_threshold`, `pre_roll_ms`, `min_speech_ms` | 0.5, 200, 250 | Silero speech probability; audio kept before onset; shorter bursts dropped |
 | asr | `threads` | 2 | FastConformer threads (D-013) |
+| asr | `unclear_mean_logprob`, `unclear_low_share` | -0.3, 0.15 | recognition this unsure shows `[unclear]` instead of a translation; `none` = off (D-022) |
 | mt | `family`, `compute`, `size`, `no_repeat_ngram`, `beam_size`, `threads` | nllb, int8, 1.3b, 4, 2, 4 | translation model and speed (D-015, D-028) |
+| mt | `repeat_min_run`, `block_profanity` | 3, true | a looping translation, or vulgar English, shows `[unclear]` (D-023, D-026) |
 | mt | `deadline_s`, `fallback_size` | 4.5, 600m | a translation predicted to finish later than this after the speech goes to the faster model (D-031) |
 | text | `glossary`, `numbers_to_digits` | glossary.tsv, true | fixes applied to the Armenian text before translation (D-016) |
 | text | `phrasebook`, `min_letters` | phrasebook.tsv, 2 | short replies translated directly; shorter noise segments hidden (D-017) |
+| text | `names`, `gazetteer` | names.tsv, "" | people and places → Latin letters before translation (D-021); the Wikidata gazetteer is off (D-028) |
 | mt | `short_beam_size` | 4 | beam for 1–3 word segments not in the phrasebook (D-017) |
 | speakers | `enabled`, `min_segment_s`, `new_speaker_min_s`, `similarity_threshold`, `short_threshold`, `max_remote_speakers`, `threads` | true, 1.0, 2.0, 0.35, unset (= `similarity_threshold`), 4, 2 | remote speaker labels (D-020) |
+| echo | `enabled`, `min_overlap_s`, `min_overlap_share`, `max_level_db`, `min_similarity`, `max_mic_only_s` | true, 0.3, 0.5, 5.0, 0.3, 0.3 | shadow-mode echo test on mic segments; logged, never hides a line (D-030) |
+| echo | `max_lag_ms`, `active_dbfs`, `max_wait_s` | 800, -45.0, 0.5 | longest speaker → mic delay searched; call level counted as talking; longest wait for system audio |
 | scenario | `remote_participants`, `separate_devices`, `turn_taking`, `call_app`, `output_setup` | 2, true, true, unspecified, unspecified | describes the test; recorded in reports only |
 
 Unit tests (no audio hardware needed): `pip install -r requirements-dev.txt; python -m pytest tests`.
@@ -77,7 +83,7 @@ copy models\nllb-600m-ct2-int8\sentencepiece.bpe.model models\nllb-1.3b-ct2-int8
 python eval/bench_mt.py --family nllb --compute int8 --beam 2 --threads 4
 ```
 
-On the eval set, translating the ASR output: chrF 60.8 against our references; 0.73 s median per segment. Known weak spots: years and clock times, rare names, and English terms that the ASR wrote in Armenian letters.
+Measured with the earlier 600M on the eval set, translating the ASR output: chrF 60.8 against our references; 0.73 s median per segment (D-015). On FLEURS reference text the 1.3B scores chrF 64.6 against 60.8 for the 600M (D-028). Known weak spots: years and clock times, rare names, and English terms that the ASR wrote in Armenian letters.
 
 ## Licences
 
