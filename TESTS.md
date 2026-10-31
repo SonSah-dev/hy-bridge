@@ -105,3 +105,16 @@ Exit check: both sources print; settings come from config.
    - no errors appear and Ctrl+C exits cleanly.
 
 **Result: PASSED 2026-10-28** (`runs/20261028-225057`). 24 segments, 14 `Me` and 10 `Remote`, labels right, nothing printed twice; latency p95 1.84 s, max 2.39 s, none over 5 s. Names were mistranslated (`Սաթենիկ` → "Satanic"/"Sattenik"), and garbled ASR on unclear speech became invented English; both are left for later steps (D-019, PLAN.md backlog).
+
+## Echo detection, shadow mode (D-030)
+Logs `echo_suspect` per mic segment; never hides a line.
+1. **Unit tests** *(automatic, done)*, `tests/test_echo.py`:
+   - echo of the call at 0, 300 and 750 ms delay is flagged;
+   - own speech with the call silent, own speech over the call at normal level, a call overlap under 0.3 s, and own speech after the call stops are not flagged;
+   - the quiet-interruption limit is kept visible in a test;
+   - frame placement and buffer expiry;
+   - shadow mode prints the same lines, in the same order, as with the detector off;
+   - a measurement error never costs a line.
+2. **Replays of the recorded calls** *(automatic; skipped without the private recordings)*: 31 Oct flags exactly 8.6, 23.8, 61.1 and 69.5 s and none of the 12 own phrases; 29 Oct flags nothing.
+3. **Real-time replays** *(done 2026-10-31)*: see D-030. No own speech was flagged; 3 of 5 echoes were flagged; no segment was over 5 s.
+4. **Next live call** *(manual, pending)*: run `python translate.py --record` with laptop speakers. Include loud and quiet interruptions while a remote person talks, then repeat with headphones. Check `echo_suspect` in `segments.jsonl` against what was actually said. Pass if no own phrase is flagged and at least 80% of echo lines are flagged. Suppression stays off until this passes and is approved.

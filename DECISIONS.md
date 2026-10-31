@@ -533,6 +533,44 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Not fixed:** in three of those four the developer said **գրամ** (grams) and the ASR heard **դրամ**, so the result ("weighs 300 AMD") is still wrong. That is a recognition error (third time seen); `Սուրճը կշռում է 500 գրամ` itself translates correctly ("Coffee weighs 500 grams"). Also seen in these tests and not fixable by text rules: NLLB adds "in the morning"/"in the afternoon" to clock times and drops "Yerevan time"; rare compounds are translated literally (`Հակաչեզոքացուցիչ` → "the opposite of neutral").
 - 245 unit tests pass.
 
+## D-030 Echo detection in shadow mode (logs only)
+- **Date:** 2026-10-31 · **Status:** implemented in shadow mode on branch `step8/echo-shadow`. It measures and logs; it hides nothing. Suppression needs the developer's approval after a new test call.
+- **Problem:** in the 2026-10-31 test call (`runs/20261031-160647`, call played through laptop speakers), 4 of 17 `Me` lines were the call's audio picked up by the mic, and 2 of them were translated as confident invented English (`Հովհ է.` → "It's John."). The 2026-10-29 call had at most 1 such line (175.5 s, unresolved). All 4 echo segments started while a remote person was talking.
+- **Study:**
+  - A waveform match (GCC-PHAT) is too weak. The mic DSP (Intel Smart Sound) gates the signal to digital zero and processes it non-linearly, and a linear echo model gave a delay that jumped between 0 and 350 ms.
+  - The patterns that survive this processing are three:
+    - **Loudness:** mic level minus call level is −17 to +4 dB for echo, against +10 to +16 dB for the developer talking over the call.
+    - **Spectrogram correlation:** 16 bands, best delay of 0 to 800 ms. Echo scores 0.30–0.51 and own speech 0.03–0.29. With the call silent the score is meaningless (about 0.3–0.47 by chance), so it only counts during call speech.
+    - **Mic-only time:** mic speech while the call is silent.
+- **Rule (`armtranslate/echo.py`, `[echo]` settings):** a mic segment is `echo_suspect` only if **all** of these hold:
+  - at least 0.3 s of its voiced time overlaps call speech, and that is at least 50% of its voiced time;
+  - mic level is no more than +5 dB above the call;
+  - correlation is at least 0.3;
+  - less than 0.3 s of mic speech falls while the call is silent.
+  - `segments.jsonl` gets `echo_suspect` and `echo` (overlap, share, level, similarity, delay, mic-only time, wait). `summary.json` gets `echo_suspect` (count and times).
+- **Pipeline:** the reader loop keeps the last 20 s of system audio. A mic segment waits until the system audio covering it has been read; live it is already there, because a segment closes 1 s after the last voiced chunk. Segments that close meanwhile queue behind it, so the order of lines is unchanged. If system audio stalls, the wait is at most 0.5 s. A failed measurement logs an error and never costs a line. The check takes 8–30 ms (1–8 s segments) on the reader thread, not the inference worker.
+- **Replays in real time** (full pipeline):
+  - **31 Oct call** (`runs/20261031-173855`): **3 flagged, all echo** (23.7 s `Հովհ.`, 61.0 s `Ինչ։`, 69.6 s `«ովհ է։`).
+    - **2 echoes missed:** 20.3 s (`Հովհ է.` → "It's John.", only 0.08 s of overlap at the chosen delay) and 45.7 s (`Հովհ.` → "How can we do this?", correlation 0.22).
+    - **Own speech flagged: none** of 13, including the overlap `Իսկ ժամ...` (+22 dB).
+  - **29 Oct call** (`runs/20261031-174055`): **0 of 47 flagged**. That includes the own phrases spoken while the call talked: `Ինչո՞վ է զբաղվում` +16 dB, `Ես նույնպես այդպես եմ կարծում` +13 dB. 175.5 s `Տտեսությություն` is not flagged (no overlap); whether it was echo is unresolved.
+  - **Offline replays** (Silero segmentation, not real time) flag 8.6, 23.8, 61.1 and 69.5 s in the 31 Oct call, and nothing in the 29 Oct call. These are unit tests that skip when the private recordings are absent.
+- **Latency:** no segment over 5 s in either replay; queue wait unchanged (mean 0.02 s); echo wait at most 0.001 s. 29 Oct replay, back to back on the same machine:
+
+| Replay | p50 | p95 | max | over 5 s |
+|---|---|---|---|---|
+| Echo on (`runs/20261031-174055`) | 2.38 s | 4.00 s | 4.50 s | 0 |
+| Echo off, control (`runs/20261031-174847`) | 2.51 s | 4.99 s | 6.07 s | **4** |
+
+  The difference comes from the machine, not the detector: translation time rose in the control run. **The control run's 4 segments over 5 s** are all forced 8 s cuts of the developer's monologue *after* the call (268–388 s), with NLLB-1.3B taking 3.4–5.1 s on long, garbled text. This problem was already there before the echo change, and it puts the 5 s requirement at risk on long monologues whenever the laptop runs slow. It should be followed up separately (for example a shorter `max_segment_s`, or a cap on the translation time). In the call itself, the 31 Oct replay had p95 2.79 s and max 3.09 s.
+- **Known limits:**
+  - **Quiet speech during simultaneous talking:** a soft interruption by the developer under loud call audio can look like echo. With own phrases mixed 10 dB below normal over 5 echo segments, 2 stayed under +5 dB; a unit test keeps this limit visible. **This is the reason the rule must stay log-only until a call with deliberate quiet interruptions has been checked.**
+  - Short echoes and echoes with a weak spectral match are missed (2 of 5 in the 31 Oct replay). The rule leans toward missing echo rather than flagging real speech.
+  - The thresholds come from 8 labelled examples on one laptop (Intel Smart Sound mic, Realtek speakers). Another mic or speaker setup may need retuning.
+  - Short non-speech that the recognizer writes as `Հովհ` also appears with the call silent (0.0 s, both calls). That isn't echo and isn't caught.
+  - Headphones remain the fix: with them, the rule never fires.
+- **Next:** a test call with speakers on, including loud and quiet interruptions, and the same call with headphones as a control. Pass if no own phrase is flagged and at least 80% of echoes are flagged; only then consider hiding flagged lines.
+
 ## D-031 Latency on a slow CPU: forced cut at 6 s, deadline fallback to NLLB-600M
 - **Date:** 2026-10-31 · **Status:** decided on replays of the recorded test call and FLEURS; not yet in a live session. (D-030 is taken by the echo work on its own branch.)
 - **Problem:** a real-time replay of the test call (`runs/20261029-202643` → `runs/20261031-174847`, 8 s cuts) had **4 segments over 5 s** (max 6.07 s). All were forced 6.5–8 s cuts of the monologue after the call, with MT 3.4–5.1 s. The same texts took **1.3–2.3 s** in the D-028 replay (`runs/20261031-001255`). The inputs were not unusual: 28–46 tokens, shorter than the FLEURS median (43). **The CPU was about 1.8× slower** (MT seconds per input token: 0.043 → 0.078; even 3-token inputs took 0.9 s instead of 0.43 s). No other process was busy and the laptop was on mains. Pinning MT to the P-cores or to the E-cores of the Core Ultra 5 125H made no difference (short median 0.62 vs 0.67 s), and neither did switching off Windows power throttling (EcoQoS). So the whole package ran slower, probably from a power or thermal limit, which code cannot fix. The fix has to leave a margin.
@@ -559,4 +597,4 @@ Published model claims are labelled *reported* until they have been reproduced h
   - So with 6 s cuts the cost is within 0.3 chrF even on the slow day. On a normal day live segments do not reach the fallback.
   - Note: the 600M timings in this run (median 1.98 s) were measured on the slow day, so they are not comparable with the 1.3B's 1.56 s from D-028.
 - **Not addressed:** the speaker embedding time on long system segments (1.8 s once) and the 1 s end pause still count against the 5 s budget. If the CPU is much slower than on this day, the 600M can miss too. For the interview: mains power, the Windows "Best performance" power mode, and no other heavy apps.
-- 255 unit tests pass.
+- 255 unit tests pass (270 after merging with D-030).
