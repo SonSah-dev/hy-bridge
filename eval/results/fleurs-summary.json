@@ -9,23 +9,62 @@
  "variants": {
   "none": {
    "chrf": 57.59,
-   "bleu": 30.37,
+   "bleu": 30.38,
    "texts_changed_vs_none": 0
   },
   "glossary": {
    "chrf": 57.62,
-   "bleu": 30.41,
+   "bleu": 30.42,
    "texts_changed_vs_none": 3
   },
   "names": {
-   "chrf": 57.58,
-   "bleu": 30.35,
+   "chrf": 57.59,
+   "bleu": 30.36,
    "texts_changed_vs_none": 1
   },
   "all": {
    "chrf": 57.61,
-   "bleu": 30.4,
+   "bleu": 30.41,
    "texts_changed_vs_none": 4
+  }
+ },
+ "mt_from_reference": {
+  "nllb-1.3b-ct2-int8-nr4": {
+   "chrf": 64.61,
+   "bleu": 40.19,
+   "mt_s_median": 1.531,
+   "mt_s_p95": 2.536,
+   "mt_s_max": 4.637
+  },
+  "nllb-1.3b-ct2-int8": {
+   "chrf": 64.38,
+   "bleu": 39.79,
+   "mt_s_median": 1.583,
+   "mt_s_p95": 2.661,
+   "mt_s_max": 12.699
+  },
+  "nllb-600m-ct2-int8": {
+   "chrf": 60.79,
+   "bleu": 35.5,
+   "mt_s_median": 1.091,
+   "mt_s_p95": 1.997,
+   "mt_s_max": 3.453
+  }
+ },
+ "mt_from_asr_by_model": {
+  "nllb-1.3b-ct2-int8": {
+   "chrf": 60.31,
+   "bleu": 33.42,
+   "mt_s_median": 1.54,
+   "mt_s_p95": 2.614,
+   "mt_s_max": 4.4
+  },
+  "nllb-600m-ct2-int8": {
+   "chrf": 57.61,
+   "bleu": 30.41,
+   "mt_s_median": 0.954,
+   "mt_s_p95": 1.72,
+   "mt_s_max": 49.107
   }
  },
  "changed_by_lists": [

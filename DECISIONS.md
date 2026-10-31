@@ -471,3 +471,56 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **MT time:** median 0.99 s, p95 1.82 s, p99 2.76 s; whole 30 s clips (124 tokens) took 4.7 s, which the live 8 s forced cut avoids. **One outlier: 49.1 s** for a 42-token sentence that re-runs in 0.9–1.4 s with identical output. Windows logged Modern Standby entries/exits (Kernel-Power 506/507) during the run, so standby is the likely cause (not proven to the second). **For the interview: mains power, and sleep/standby off.**
 - **Conclusion:** the general mechanisms (numbers, phrasebook, `[unclear]`, repetition guard) show no harm on held-out data. The glossary and names lists have no measurable average effect on general text and produced 2 false matches in 350 sentences; their benefit for interview vocabulary is still unmeasured. Treat them as preparation aids, kept exact or close to it.
 - 193 unit tests pass.
+
+## D-025 Bare names and units shown as is; spoken clock times as digits
+- **Date:** 2026-10-30 · **Status:** verified by replaying the developer's mic test (`runs/20261030-214321`), all logged texts and the FLEURS ASR output; not yet on a live call.
+- **Mic test (2.5 min, mic only, no call audio):** latency p50 1.45 s, p95 1.66 s, max 1.68 s. Names, places and full sentences were right ("Hello, Satenik.", "Vanadzor is quite far away.", "Sona is late for the meeting.", "The capital of Armenia is Yerevan."). Problems:
+  1. A segment that is only a name: `Սաթենիկ ջան։` → (names list) `Satenik։` → NLLB **"What is it?"**. Probe: `Satenik, Sona։` → "Satenik, Sona. What are you doing?"; `Python։` → "This is Python."
+  2. A unit alone: `Կգ։` → **"What are you doing here?"**; probe: `կմ։` → "What is this?", `Տոկոս։` → "What is it?".
+  3. Clock times: NLLB misreads spoken forms (`Ժամը ութն անց կես է։` → "It's after eight and a half.") but reads digits (`Ժամը 8:30 է։` → "It's 8:30."; `ժամը 8:30-ին կհանդիպենք` → "I'll see you at 8:30.").
+  4. The ASR garbled "eight" in every time phrase of the test (`Ուութթն է`, `Ուսնանց երեսոուն`, `Ուութթանց կես`). Two of these were confident enough to pass `[unclear]` and became "I'm going to teach you something." and "Halfway through Watson.". **Not fixed**: this is recognition, which a text rule cannot repair.
+- **Changes:**
+  - `SegmentTranslator`: a segment whose words are all Latin (names or terms already replaced) is shown as is, not translated; Armenian punctuation becomes English (`Amazon՞։` → "Amazon?").
+  - `phrasebook.tsv`: common units on their own (կգ, կմ, սմ, մմ, կիլոգրամ, կիլոմետր, մետր, գրամ, տոկոս, դրամ, դոլար, եվրո).
+  - `textfix.times_to_digits` (with `text.numbers_to_digits`): `<hour 1–12, with the connective ն/ը> անց <կես | քառորդ | minutes in words>` → `H:MM`; an `-ին` ending on the minutes is kept (`9:15-ին`). Garbled hours and other uses of `անց` ("three days later") are left alone.
+- **Replay:**
+  - Mic test: `Սաթենիկ ջան։` → "Satenik."; `Կգ։` → "kg.". The garbled times stay wrong (item 4).
+  - All 211 logged and eval texts: the time rule changes 1 (eval clip mic-07, `Ինն անց կես` → 9:30, correct); the Latin pass-through changes 2 (`Ամազո՞։` → "Amazon?", previously "What about Amazon?" from MT; `Վժըն քընթռոլ։` → "version control."); units 0.
+  - FLEURS ASR (822 texts, held out): the time rule changes 1, correctly (`տասնմեկ անց երեսունհինգ րոպե` → 11:35; translation "…by 11:35", reference "by 11:35 pm"); pass-through and units 0.
+- **Open:** `Մոտակա է։` ("it's nearby") was shown as `[unclear]` (mean −0.265, unsure share 0.167). If that is what was said, it is a false alarm, the first one seen on clear speech; the developer is asked to confirm before any threshold change.
+- 211 unit tests pass.
+
+## D-026 Glued times, `կոգ` after numbers, profanity guard, gazetteer matcher
+- **Date:** 2026-10-30 · **Status:** implemented and unit-tested; the gazetteer *data* is still being built (Wikidata outage) and is checked for false matches before use.
+- **From the developer's mic tests** (`runs/20261030-215355`, `-221858`, mic only):
+  - **Glued times:** the ASR wrote `ութն անց` as one word (`ութնանց`, `ութանց`), so the D-025 rule did not fire ("approach halfway through the eight"). The space before `անց` is now optional; non-hour words (`կանանց`, "of women") are still left alone.
+  - **`կոգ` → `կգ` after a number:** the ASR wrote the spoken abbreviation as `կոգ` in two tests ("980 coug"); `980 կգ` translates as "980 kg.". Only directly after a digit.
+  - **Profanity guard:** NLLB invented vulgarities from garbled ASR ("Those are the bastards, you know.", D-019; "Be the son of a bitch.", from `Եղ որդի խճյուղին`) and from correct Armenian (FLEURS: "rumors" → "bullshit", D-027). English output matching a short list of strong vulgar words (`fuck…`, `shit/shits/shitty`, `bullshit…`, `bitch…`, `bastard(s)`, `asshole(s)`, `cunt(s)`, `whore(s)`, `slut(s)`) is shown as `[unclear]` (`unclear_reason` "mt-profanity"). Setting `mt.block_profanity` (true). Checked: it catches the 3 real cases and 0 of 826 FLEURS ASR translations and 0 of 240 eval-result translations; the surname "Shitov" was matched by a first version and the word forms were narrowed. Cost: real swearing is hidden too.
+- **Gazetteer matcher (`textfix.Gazetteer`):** for a large, uncurated Wikidata list (places in Armenia, Armenian people, given names), applied after the user's `names.tsv`. Strict: exact words only; the first word capitalised; an ending allowed on the last word (`Tumanyan-ը`); a single word must not start a sentence (ordinary words are capitalised there) and must have ≥ 4 letters. Setting `text.gazetteer` (`gazetteer.tsv`; a missing file prints a warning and the run continues). Built by `eval/build_gazetteer.py` via the Wikidata Action API, because the SPARQL service was rate-limited (1 request/min, outage) and the QLever mirror returned 502.
+  - **Rejected filter:** the MIT HySpell dictionary (`hy-r.dic`, 162k entries) was meant to drop names that are also ordinary words, but it lists proper nouns in lower case too (`վանաձոր`, `թումանյան`, `սաթենիկ`), so it cannot tell them apart.
+- 240 unit tests pass (with D-027).
+
+## D-027 MT ceiling on FLEURS; sentences translated separately
+- **Date:** 2026-10-30 · **Status:** measured on FLEURS `hy_am` test (D-024).
+- **Ceiling:** the same MT path on the **reference** Armenian (no recognition errors) scores chrF **60.8** / BLEU 35.5, against **57.6** / 30.4 from the ASR text. Recognition costs about 3 chrF points (median 1.6 per clip; 91 of 932 clips lose more than 15). **Most of the remaining quality loss is the translation model**, consistent with D-015 (own clips: 60.8 from reference vs 60.8 from ASR).
+- **NLLB-600M errors on correct Armenian** (worst sentences): wrong word choices ("deface" → "distort", "maria" → "eruptions", "label" → "trademark", "rumors" → "bullshit"), invented details ("p.m.", D-025), and **dropped sentences**: with 2+ sentences in one input it often translated only the first.
+- **Change:** `SegmentTranslator` splits its input at sentence ends (`։ . ? !` or the FLEURS colon, followed by a space and a capital letter) and translates each sentence through the same path (phrasebook, short-input handling, pass-through). `8:30` and "Python-ը գիտեմ. իսկ" stay whole.
+- **Effect:** FLEURS references with 2+ sentences (57 of 350): chrF 57.6 → 60.6 (found on this data). FLEURS ASR output with 2+ sentences (48 of 932 clips): 58.2 → 61.8. **Own eval clips: 0 of 15** reach MT with 2+ sentences (the ASR joins them with commas), so no independent check was possible; **logged live texts: 0 of 235**. In live use the change will rarely fire: it is kept because it is cheap and only acts on multi-sentence input. Slowest split translation 1.61 s.
+- **Ready-made larger model:** `OpenNMT/nllb-200-distilled-1.3B-ct2-int8` (1.38 GB, CTranslate2 maintainers; CC-BY-NC-4.0 like the 600M; same SentencePiece model as the 600M). Not downloaded yet; the next measurement is its chrF on FLEURS and its latency on this CPU.
+
+## D-028 Translation: NLLB-200 distilled 1.3B, int8, no repeated 4-grams; gazetteer off
+- **Date:** 2026-10-31 · **Status:** decided on FLEURS (held out) and a replay of the recorded test call; not yet in a live session.
+- **Model:** `OpenNMT/nllb-200-distilled-1.3B-ct2-int8` (1.38 GB, ready-made CTranslate2 int8 by the CTranslate2 maintainers; CC-BY-NC-4.0 like the 600M, D-005). Its vocabulary is identical to the 600M's (256,206 tokens), so the 600M's `sentencepiece.bpe.model` is reused. Settings `mt.size` (`1.3b`/`600m`) and `mt.no_repeat_ngram`.
+- **FLEURS `hy_am` test** (932 clips, D-024), same settings (int8, beam 2, 4 threads, all text fixes):
+
+| Model | chrF / BLEU from ASR | chrF / BLEU from reference | MT time median / p95 / max (reference) |
+|---|---|---|---|
+| NLLB-600M | 57.6 / 30.4 | 60.8 / 35.5 | 1.09 / 2.00 / 3.45 s |
+| NLLB-1.3B | 60.3 / 33.4 | 64.4 / 39.8 | 1.58 / 2.66 / **12.70 s** |
+| **NLLB-1.3B, `no_repeat_ngram_size` 4** | — | **64.6 / 40.2** | 1.53 / 2.54 / 4.64 s |
+
+  - Per sentence (from ASR): the 1.3B is better by > 5 chrF on 126 of 350, worse on 49. Gains are meaning fixes ("mosaic" → mosasaur; "16-gun ammunition" → "M16 rifle"; dropped sentences recovered); losses are mostly paraphrases ("hot climate", "home"). From the mic tests: "10:20 p.m. local time" → "10:20 in Yerevan time"; "bullshit" → "nonsense"; "My name is Lune" → "Lusine".
+  - **Loops:** the 1.3B repeated "it rains so hard" 26 times on a 100-token input (12.7 s). With `no_repeat_ngram_size` 4 the same input gives a correct translation in 4.3 s; across FLEURS only 16 of 350 translations change, none by more than 5 chrF worse, and the longest repeat falls from 26 to 2. `repetition_penalty` 1.2 was faster but changed "km/h" into "miles an hour", so it was rejected.
+- **Latency, replay of the recorded test call** (`runs/20261029-202643` → `runs/20261031-001255`; both sources, speaker labels, all fixes, real time): 70 segments, latency **p50 1.84 s, p95 2.76 s, max 3.31 s**, none over 5 s; MT p95 1.92 s, max 2.28 s. The same call live with the 600M: p50 1.63, p95 2.48, max 2.73 s. **6 further segments were caught by Windows standby** (one translation "took" 4,373 s; it reruns in 1.72 s; a wake event was logged): sleep/standby must be off (D-024).
+- **Gazetteer (D-026) off by default:** with the 1.3B it lowers chrF on the 13 FLEURS sentences it changes (56.0 → 54.7; e.g. Cristina → "Kristina"), because the larger model already writes names well. On the logged mic tests it gave small gains ("Deseg" → "Dsegh", "Hovhannis" → "Hovhannes") and one loss ("Mashtots" → "Mashtosh"). The data and matcher stay; `text.gazetteer = "gazetteer.tsv"` turns it on.
+- **Speaker labels, same replay:** 3 labels for the 2 remote people. Person B's 2.4 s `Այո, ո։` started a speaker, and her next line scored 0.33 against it (threshold 0.35). The D-020 tuning on this call had 2 labels only because the live segment boundaries differed slightly. **Labelling for B's voice sits on the threshold; the planned second test call is needed to retune with new data** (TESTS.md §Speakers).

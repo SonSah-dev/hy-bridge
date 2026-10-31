@@ -89,9 +89,16 @@ def main() -> int:
 
     print("loading models ...", file=sys.stderr)
     asr = Recognizer(threads=cfg.asr.threads)
-    mt = Translator(cfg.mt.family, cfg.mt.compute, threads=cfg.mt.threads, beam_size=cfg.mt.beam_size)
+    mt = Translator(cfg.mt.family, cfg.mt.compute, threads=cfg.mt.threads, beam_size=cfg.mt.beam_size,
+                    size=cfg.mt.size, no_repeat_ngram=cfg.mt.no_repeat_ngram)
     glossary = (ROOT / cfg.text.glossary) if cfg.text.glossary else None
-    fixer = TextFixer(glossary, cfg.text.numbers_to_digits, (ROOT / cfg.text.names) if cfg.text.names else None)
+    gazetteer = (ROOT / cfg.text.gazetteer) if cfg.text.gazetteer else None
+    if gazetteer is not None and not gazetteer.exists():   # generated file: optional, but say so
+        print(f"warning: {gazetteer.name} not found, running without it "
+              "(build it with: python eval/build_gazetteer.py)", file=sys.stderr)
+        gazetteer = None
+    fixer = TextFixer(glossary, cfg.text.numbers_to_digits, (ROOT / cfg.text.names) if cfg.text.names else None,
+                      gazetteer)
     phrasebook = Phrasebook(ROOT / cfg.text.phrasebook) if cfg.text.phrasebook else None
     translate = SegmentTranslator(mt, phrasebook, cfg.mt.short_beam_size)
     asr.transcribe(np.zeros(16_000, np.float32))      # warm-up, so the first phrase is not slower
@@ -119,8 +126,10 @@ def main() -> int:
     degenerate = None
     if cfg.mt.repeat_min_run is not None:
         degenerate = lambda src, en: is_degenerate(src, en, cfg.mt.repeat_min_run)  # noqa: E731
+    from armtranslate.mt import is_profane
     worker = Worker(asr.transcribe_scored, translate, fixer, log=log, min_letters=cfg.text.min_letters,
-                    speakers=speakers, unclear=unclear, degenerate=degenerate)
+                    speakers=speakers, unclear=unclear, degenerate=degenerate,
+                    profane=is_profane if cfg.mt.block_profanity else None)
 
     p = None
     sources, inputs = {}, {}
