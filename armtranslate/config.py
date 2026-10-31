@@ -82,6 +82,20 @@ class SpeakerConfig:
 
 
 @dataclass(frozen=True)
+class EchoConfig:
+    """Echo detection, shadow mode: measured and logged, never hides a line (D-030)."""
+    enabled: bool = True                   # measure mic segments against system audio; false = off
+    min_overlap_s: float = 0.3             # voiced mic time overlapping call speech
+    min_overlap_share: float = 0.5         # ... as a share of the segment's voiced time
+    max_level_db: float = 5.0              # mic p90 minus call p90; echo -17..+4, own speech +10..+16
+    min_similarity: float = 0.3            # spectrogram correlation; echo 0.30-0.51, own speech <= 0.29
+    max_mic_only_s: float = 0.3            # mic voiced while the call is silent this long: own speech
+    max_lag_ms: int = 800                  # longest speaker -> mic delay searched
+    active_dbfs: float = -45.0             # system frame louder than this: the call is talking
+    max_wait_s: float = 0.5                # longest a mic segment waits for system audio to cover it
+
+
+@dataclass(frozen=True)
 class ScenarioConfig:
     """Describes the test/interview setup. Recorded in reports; no code branches on it."""
     remote_participants: int = 2
@@ -99,6 +113,7 @@ class Config:
     mt: MtConfig = field(default_factory=MtConfig)
     text: TextConfig = field(default_factory=TextConfig)
     speakers: SpeakerConfig = field(default_factory=SpeakerConfig)
+    echo: EchoConfig = field(default_factory=EchoConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
 
     def to_dict(self) -> dict[str, Any]:

@@ -5,6 +5,8 @@ thread runs ASR, the speaker embedding (system audio only, D-020) and MT in orde
 never shared by two inferences (D-010).
 Every segment is logged as one JSON line with its timings; latency is measured from the
 end of the last voiced chunk to the moment the line is printed (TESTS.md).
+With an `EchoDetector`, each mic segment is also measured against the system audio and logged
+with `echo_suspect`; shadow mode only, nothing is hidden (D-030).
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ import queue
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, TextIO
@@ -21,6 +23,7 @@ from typing import Callable, TextIO
 import numpy as np
 
 from .audio import AudioFrame, wall_time
+from .echo import EchoDetector
 from .evalset import read_wav
 from .textfix import _ALPHA
 from .vad import Segment
@@ -124,6 +127,8 @@ class Result:
     unclear: bool = False         # shown as "[unclear]" instead of a translation (D-022, D-023)
     unclear_reason: str | None = None   # "asr": unsure recognition; "mt-repeat": MT looped;
                                         # "mt-profanity": vulgar English (D-026)
+    echo_suspect: bool | None = None    # mic segment looks like call audio picked up by the mic;
+    echo: dict | None = None            # logged only, the line is still shown (D-030)
 
     def line(self) -> str:
         clock = datetime.fromtimestamp(self.t_start).strftime("%H:%M:%S")
@@ -190,7 +195,8 @@ class Worker:
         r = Result(seg.source, label, seg.t_start, round(seg.duration_s, 2),
                    seg.forced, hy, fixed, en, round(asr_s, 3), round(mt_s, 3),
                    round(max(0.0, t_dequeue - seg.t_emit), 3), round(t_print - seg.t_last_voice, 3), t_print,
-                   round(spk_s, 3), speaker, conf, unclear, reason)
+                   round(spk_s, 3), speaker, conf, unclear, reason,
+                   seg.echo.get("suspect") if seg.echo else None, seg.echo)
         print(r.line(), file=self.out, flush=True)
         if self.log is not None:
             self.log.write(json.dumps(r.__dict__, ensure_ascii=False) + "\n")
@@ -221,24 +227,62 @@ def latency_summary(results: list[Result]) -> dict:
 
 
 def run(sources: dict, segmenters: dict, worker: Worker, stop: threading.Event | None = None,
-        idle_s: float = 0.005) -> None:
+        idle_s: float = 0.005, echo: EchoDetector | None = None) -> None:
     """Read all sources until `stop` is set (or every FileSource has finished).
 
     Each pass drains every frame a source has ready without waiting, so a quiet source never
     holds up a busy one; the loop sleeps `idle_s` only when no source had anything.
+    With `echo`, a mic segment waits until the system audio covering it has been read (live it
+    is already there; if system audio stalls, at most `max_wait_s`), is measured, and then goes to
+    the worker unchanged. Segments queue behind it, so the order of lines does not change.
     """
     stop = stop or threading.Event()
+    pending: list[tuple[Segment, float]] = []     # segments held behind a mic segment (D-030)
+    sys_stalled = False                           # the last pass got no system audio at all
+
+    def submit(seg: Segment) -> None:
+        if echo is None or (seg.source != "mic" and not pending):
+            worker.submit(seg)
+        else:
+            pending.append((seg, time.perf_counter()))
+
+    def release(force: bool = False) -> None:
+        while pending:
+            seg, t_wait = pending[0]
+            if seg.source != "mic":
+                worker.submit(pending.pop(0)[0])
+                continue
+            end = seg.t_start + seg.duration_s
+            waited = time.perf_counter() - t_wait
+            if not (force or echo.covers(end) or (sys_stalled and waited >= echo.cfg.max_wait_s)):
+                return
+            pending.pop(0)
+            try:
+                m = echo.check(seg.samples, seg.t_start)
+                m.update(covered=echo.covers(end), wait_s=round(waited, 3))
+            except Exception as e:      # measuring must never cost a line
+                m = {"suspect": None, "error": f"{type(e).__name__}: {e}"}
+            worker.submit(replace(seg, echo=m))
+
     for s in sources.values():
         s.start()
     worker.start()
     try:
         while not stop.is_set():
-            got = False
+            got = sys_got = False
             for name, src in sources.items():
                 while (frame := src.read(timeout=0)) is not None:
                     got = True
+                    sys_got = sys_got or name == "system"
                     for seg in segmenters[name].push(frame):
-                        worker.submit(seg)
+                        submit(seg)
+                    if echo is not None:
+                        if name == "system":
+                            echo.feed(frame)
+                        release()
+            if echo is not None:
+                sys_stalled = not sys_got
+                release()
             if not got:
                 if all(getattr(s, "finished", False) for s in sources.values()):
                     break
@@ -249,5 +293,7 @@ def run(sources: dict, segmenters: dict, worker: Worker, stop: threading.Event |
         for name, src in sources.items():
             src.stop()
             for seg in segmenters[name].flush():
-                worker.submit(seg)
+                submit(seg)
+        if echo is not None:
+            release(force=True)
         worker.close()

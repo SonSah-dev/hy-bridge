@@ -63,6 +63,19 @@ similarity_threshold = 0.35   # cosine to a speaker's centroid; higher = more ne
 max_remote_speakers = 4       # safety cap against label explosion; brief requires >= 2
 threads = 2                   # onnxruntime threads for the speaker embedding
 
+[echo]
+# Shadow mode (D-030): flags mic segments that look like the call's audio picked up by the mic
+# (speakers instead of headphones) as "echo" in segments.jsonl. Nothing is hidden or changed.
+enabled = true
+min_overlap_s = 0.3           # voiced mic time overlapping call speech
+min_overlap_share = 0.5       # ... as a share of the segment's voiced time
+max_level_db = 5.0            # mic minus call level; echo is quieter than the call, own voice louder
+min_similarity = 0.3          # spectrogram correlation with the call audio at the best delay
+max_mic_only_s = 0.3          # mic voiced this long in all while the call is silent: own speech
+max_lag_ms = 800              # longest speaker -> mic delay searched (Bluetooth adds 150-300 ms)
+active_dbfs = -45.0           # system audio louder than this counts as the call talking
+max_wait_s = 0.5              # longest a mic segment waits for the system audio covering it
+
 [scenario]
 # Describes the test setup; written into reports. No code depends on these values.
 remote_participants = 2       # initial test: two remote people...

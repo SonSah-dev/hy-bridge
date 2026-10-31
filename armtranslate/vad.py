@@ -43,6 +43,7 @@ class Segment:
     t_emit: float             # Unix (stream) time at which the segmenter closed the segment
     samples: np.ndarray
     forced: bool = False      # cut at max_segment_s rather than at a pause
+    echo: dict | None = None  # echo measurements for mic segments, shadow mode (D-030)
 
     @property
     def duration_s(self) -> float:
