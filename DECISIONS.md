@@ -532,3 +532,31 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Check:** FLEURS ASR 0 of 822 texts change (its 9 sentences with `դրամ` have no digit before it); logged texts 4 change, all from the developer's currency tests.
 - **Not fixed:** in three of those four the developer said **գրամ** (grams) and the ASR heard **դրամ**, so the result ("weighs 300 AMD") is still wrong. That is a recognition error (third time seen); `Սուրճը կշռում է 500 գրամ` itself translates correctly ("Coffee weighs 500 grams"). Also seen in these tests and not fixable by text rules: NLLB adds "in the morning"/"in the afternoon" to clock times and drops "Yerevan time"; rare compounds are translated literally (`Հակաչեզոքացուցիչ` → "the opposite of neutral").
 - 245 unit tests pass.
+
+## D-031 Latency on a slow CPU: forced cut at 6 s, deadline fallback to NLLB-600M
+- **Date:** 2026-10-31 · **Status:** decided on replays of the recorded test call and FLEURS; not yet in a live session. (D-030 is taken by the echo work on its own branch.)
+- **Problem:** a real-time replay of the test call (`runs/20261029-202643` → `runs/20261031-174847`, 8 s cuts) had **4 segments over 5 s** (max 6.07 s). All were forced 6.5–8 s cuts of the monologue after the call, with MT 3.4–5.1 s. The same texts took **1.3–2.3 s** in the D-028 replay (`runs/20261031-001255`). The inputs were not unusual: 28–46 tokens, shorter than the FLEURS median (43). **The CPU was about 1.8× slower** (MT seconds per input token: 0.043 → 0.078; even 3-token inputs took 0.9 s instead of 0.43 s). No other process was busy and the laptop was on mains. Pinning MT to the P-cores or to the E-cores of the Core Ultra 5 125H made no difference (short median 0.62 vs 0.67 s), and neither did switching off Windows power throttling (EcoQoS). So the whole package ran slower, probably from a power or thermal limit, which code cannot fix. The fix has to leave a margin.
+- **Options measured** (same 21 slow texts in one process, 1.3B median / max):
+  - **Split long texts at commas and translate the pieces as one batch:** only 17% faster on CPU (2.13 vs 2.62 s median), and the joined English reads worse ("I mean,, I'll work on it now, and you can have one, Yeah, …"). Rejected.
+  - **Tighter output-length cap:** real outputs are about 1.3× the input length, under the current 2× + 10 cap (D-020), so a tighter cap would only cut translations short. Rejected.
+  - **NLLB-600M for every long input:** 1.48 vs 2.62 s median (about 45% faster), but chrF on FLEURS drops 64.5 → 61.4. Used only as a fallback (below).
+  - **`max_segment_s` 6:** fewer tokens per forced cut (median 23, max 36).
+- **Replays of the call on the same (slow) day**, all real time with both sources and speaker labels:
+
+| Setting | Segments | p50 | p95 | max | > 5 s | Lines by 600M |
+|---|---|---|---|---|---|---|
+| 8 s cut, 1.3B only (old default), `runs/20261031-194224` | 76 | 2.35 | 4.39 | 5.03 | 1 | — |
+| 8 s cut + fallback, `runs/20261031-195002` | 76 | 2.69 | 4.36 | 6.43 | 1 | 24 of 66 |
+| 6 s cut, 1.3B only, `runs/20261031-200909` | 88 | 2.53 | 4.11 | 4.48 | 0 | — |
+| **6 s cut + fallback (new default)**, `runs/20261031-200133` | 88 | 2.48 | **3.66** | **3.93** | **0** | 8 of 76 |
+
+  With 8 s cuts the fallback fixed the monologue but fired on a third of the lines. One non-forced 5.9 s system segment still reached 6.4 s, because a slow speaker embedding (1.8 s, usually about 0.5 s) and the 1 s end pause used up the budget before MT started.
+- **Change 1, `segmentation.max_segment_s` 8 → 6.** The cut is still placed at the quietest point of the last 1.5 s. Cost: more forced cuts in a monologue (24 → 39 on this call), so a sentence is split mid-way more often. This was not measured on FLEURS (whole clips, no live cuts).
+- **Change 2, deadline fallback (`mt.deadline_s` 4.5, `mt.fallback_size` "600m"):** the 600M is loaded next to the 1.3B (about 0.6 GB more RAM). `Translator` keeps a speed model, seconds ≈ k × (input tokens + 4), where k is a moving average (α 0.3) over translations at the default beam. It is seeded at start-up from one typical sentence after the warm-up. On the logged replays the actual time was within 1.3× of this at p90. So the prediction is multiplied by 1.3, and a segment goes to the 600M when last voice → now + prediction would pass 4.5 s. Short replies (1–3 words, D-017) always use the 1.3B. `segments.jsonl` records `mt_fallback`. `--set mt.deadline_s=none` turns it off.
+- **Quality (FLEURS `hy_am` reference Armenian, 350 sentences, D-027/D-028, 1.3B 64.53 / 600M 61.37 chrF).** I simulated the decision at the speeds measured, with 0.6 s spent before MT:
+  - **All sentences:** chrF 64.27 at k = 0.033 (FLEURS bench speed), 63.92 at 0.043 (normal live day), 62.80 at 0.06, 61.63 at 0.078 (slow day).
+  - **Live-sized sentences (≤ 35 tokens, 97 of 350; the longest 6 s cut in the replays had 36):** 62.39 at k ≤ 0.06 (no fallback), **62.07 at 0.078**.
+  - So with 6 s cuts the cost is within 0.3 chrF even on the slow day. On a normal day live segments do not reach the fallback.
+  - Note: the 600M timings in this run (median 1.98 s) were measured on the slow day, so they are not comparable with the 1.3B's 1.56 s from D-028.
+- **Not addressed:** the speaker embedding time on long system segments (1.8 s once) and the 1 s end pause still count against the 5 s budget. If the CPU is much slower than on this day, the 600M can miss too. For the interview: mains power, the Windows "Best performance" power mode, and no other heavy apps.
+- 255 unit tests pass.

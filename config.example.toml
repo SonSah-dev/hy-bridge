@@ -20,7 +20,8 @@ queue_seconds = 10.0          # buffered audio per source before chunks are drop
 
 [segmentation]
 end_pause_ms = 1000           # end of phrase; lower = faster, higher = more complete sentences (D-016)
-max_segment_s = 8.0           # forced cut so long monologues stay within the 5 s latency budget
+max_segment_s = 6.0           # forced cut so long monologues stay within the 5 s latency budget;
+                              # 8.0 went over 5 s on a slow CPU (D-031)
 vad_threshold = 0.5           # Silero speech probability that starts speech
 pre_roll_ms = 200             # audio kept before speech onset
 min_speech_ms = 250           # shorter voiced bursts are dropped
@@ -44,6 +45,9 @@ repeat_min_run = 3            # a phrase repeated 3+ times in a row in the trans
                               # Armenian) shows "[unclear]": NLLB looped "well, well, ..." (D-023)
 block_profanity = true        # vulgar English shows "[unclear]": NLLB invented obscenities from
                               # garbled speech (D-026); real swearing is hidden as well
+deadline_s = 4.5              # last voice -> English. A translation the main model is predicted to finish
+                              # later (from its measured speed) goes to the fallback model; none = off (D-031)
+fallback_size = "600m"        # NLLB size used then (loaded at start-up, ~0.6 GB); "" = no fallback
 
 [text]
 glossary = "glossary.tsv"     # Armenian-letter spellings of terms, fixed before translation; "" = off

@@ -27,6 +27,9 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
+# A conversational sentence of typical length (~25 tokens), translated once at start-up to measure the
+# MT speed: "Yesterday I went to the store to buy some bread and milk, but it was already closed."
+CALIBRATION_HY = "Երեկ ես գնացի խանութ, որ մի քիչ հաց ու կաթ գնեմ, բայց այն արդեն փակ էր։"
 from armtranslate import audio  # noqa: E402
 from armtranslate.config import load_config, parse_device  # noqa: E402
 from armtranslate.pipeline import LABELS, FileSource, RecordingSource, Worker, latency_summary, run  # noqa: E402
@@ -100,9 +103,15 @@ def main() -> int:
     fixer = TextFixer(glossary, cfg.text.numbers_to_digits, (ROOT / cfg.text.names) if cfg.text.names else None,
                       gazetteer)
     phrasebook = Phrasebook(ROOT / cfg.text.phrasebook) if cfg.text.phrasebook else None
-    translate = SegmentTranslator(mt, phrasebook, cfg.mt.short_beam_size)
+    fallback = None
+    if cfg.mt.deadline_s is not None and cfg.mt.fallback_size and cfg.mt.fallback_size != cfg.mt.size:
+        fallback = Translator(cfg.mt.family, cfg.mt.compute, threads=cfg.mt.threads, beam_size=cfg.mt.beam_size,
+                              size=cfg.mt.fallback_size, no_repeat_ngram=cfg.mt.no_repeat_ngram)
+    translate = SegmentTranslator(mt, phrasebook, cfg.mt.short_beam_size, fallback)
     asr.transcribe(np.zeros(16_000, np.float32))      # warm-up, so the first phrase is not slower
-    mt.translate("Բարեւ")
+    for m in (mt, fallback) if fallback else (mt,):
+        m.translate("Բարեւ")
+    mt.calibrate(CALIBRATION_HY)                       # seeds the speed model of the deadline (D-031)
     speakers = None
     if cfg.speakers.enabled and ("system" in wavs or (not wavs and a.use_system)):
         from armtranslate.speakers import Embedder, SpeakerLabeler, SpeakerTracker
@@ -129,7 +138,8 @@ def main() -> int:
     from armtranslate.mt import is_profane
     worker = Worker(asr.transcribe_scored, translate, fixer, log=log, min_letters=cfg.text.min_letters,
                     speakers=speakers, unclear=unclear, degenerate=degenerate,
-                    profane=is_profane if cfg.mt.block_profanity else None)
+                    profane=is_profane if cfg.mt.block_profanity else None,
+                    mt_deadline_s=cfg.mt.deadline_s if fallback else None)
 
     p = None
     sources, inputs = {}, {}

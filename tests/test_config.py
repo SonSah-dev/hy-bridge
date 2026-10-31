@@ -11,7 +11,7 @@ def test_defaults_match_d010():
     c = Config()
     assert c.audio.mic_device is None and c.audio.system_device is None
     assert c.segmentation.end_pause_ms == 1000   # D-010 default 600, changed by D-016
-    assert c.segmentation.max_segment_s == 8.0
+    assert c.segmentation.max_segment_s == 6.0
     assert c.speakers.min_segment_s == 1.0
     assert c.speakers.similarity_threshold == 0.35  # tuned on the Step 7 test call (D-020)
     assert c.speakers.new_speaker_min_s == 2.0

@@ -33,7 +33,7 @@ class AudioConfig:
 @dataclass(frozen=True)
 class SegmentationConfig:
     end_pause_ms: int = 1000               # end of phrase; 600 split spontaneous sentences (D-016)
-    max_segment_s: float = 8.0             # forced cut, keeps monologues within the 5 s budget
+    max_segment_s: float = 6.0             # forced cut, keeps monologues within the 5 s budget (D-031)
     vad_threshold: float = 0.5             # Silero speech probability that starts speech
     pre_roll_ms: int = 200                 # audio kept before speech onset, so first syllables survive
     min_speech_ms: int = 250               # shorter voiced bursts (clicks, coughs) are dropped
@@ -58,6 +58,9 @@ class MtConfig:
     repeat_min_run: int | None = 3         # output phrase repeated this often in a row (and 2 more
                                            # than in the source): "[unclear]"; None = off (D-023)
     block_profanity: bool = True           # vulgar English output -> "[unclear]" (D-026)
+    deadline_s: float | None = 4.5         # last voice -> English; a translation predicted to finish
+                                           # later goes to the fallback model; None = off (D-031)
+    fallback_size: str = "600m"            # NLLB size used then; "" = no fallback (D-031)
 
 
 @dataclass(frozen=True)

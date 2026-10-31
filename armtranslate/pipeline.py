@@ -124,6 +124,7 @@ class Result:
     unclear: bool = False         # shown as "[unclear]" instead of a translation (D-022, D-023)
     unclear_reason: str | None = None   # "asr": unsure recognition; "mt-repeat": MT looped;
                                         # "mt-profanity": vulgar English (D-026)
+    mt_fallback: bool = False     # translated by the faster fallback model to keep the deadline (D-031)
 
     def line(self) -> str:
         clock = datetime.fromtimestamp(self.t_start).strftime("%H:%M:%S")
@@ -143,6 +144,8 @@ class Worker:
     unclear: Callable[[str, dict], bool] | None = None   # (fixed text, confidence) -> garbled? (D-022)
     degenerate: Callable[[str, str], bool] | None = None  # (fixed text, English) -> MT looped? (D-023)
     profane: Callable[[str], bool] | None = None          # English -> invented vulgarity? (D-026)
+    mt_deadline_s: float | None = None   # last voice -> translation done; passed to translate as
+                                         # budget_s, so a slow model can hand over to a faster one (D-031)
     results: list[Result] = field(default_factory=list)
     skipped: int = 0
 
@@ -179,8 +182,14 @@ class Worker:
         fixed = self.fix(hy)
         unclear = conf is not None and self.unclear is not None and self.unclear(fixed, conf)
         t = time.perf_counter()
-        en = UNCLEAR if unclear else self.translate(fixed)
+        if unclear:
+            en = UNCLEAR
+        elif self.mt_deadline_s is not None:
+            en = self.translate(fixed, budget_s=self.mt_deadline_s - (self.clock() - seg.t_last_voice))
+        else:
+            en = self.translate(fixed)
         mt_s = time.perf_counter() - t
+        fallback = not unclear and getattr(self.translate, "used_fallback", False)
         reason = "asr" if unclear else None
         if not unclear and self.degenerate is not None and self.degenerate(fixed, en):
             en, unclear, reason = UNCLEAR, True, "mt-repeat"
@@ -190,7 +199,7 @@ class Worker:
         r = Result(seg.source, label, seg.t_start, round(seg.duration_s, 2),
                    seg.forced, hy, fixed, en, round(asr_s, 3), round(mt_s, 3),
                    round(max(0.0, t_dequeue - seg.t_emit), 3), round(t_print - seg.t_last_voice, 3), t_print,
-                   round(spk_s, 3), speaker, conf, unclear, reason)
+                   round(spk_s, 3), speaker, conf, unclear, reason, fallback)
         print(r.line(), file=self.out, flush=True)
         if self.log is not None:
             self.log.write(json.dumps(r.__dict__, ensure_ascii=False) + "\n")
