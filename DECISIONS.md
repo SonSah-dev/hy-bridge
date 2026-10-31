@@ -534,7 +534,7 @@ Published model claims are labelled *reported* until they have been reproduced h
 - 245 unit tests pass.
 
 ## D-030 Echo detection in shadow mode (logs only)
-- **Date:** 2026-10-31 · **Status:** implemented in shadow mode on branch `step8/echo-shadow`. It measures and logs; it hides nothing. Suppression needs the developer's approval after a new test call.
+- **Date:** 2026-10-31 · **Status:** implemented in shadow mode; merged into main on 2026-10-31 (after D-031). It measures and logs; it hides nothing. Suppression needs the developer's approval after a new test call.
 - **Problem:** in the 2026-10-31 test call (`runs/20261031-160647`, call played through laptop speakers), 4 of 17 `Me` lines were the call's audio picked up by the mic, and 2 of them were translated as confident invented English (`Հովհ է.` → "It's John."). The 2026-10-29 call had at most 1 such line (175.5 s, unresolved). All 4 echo segments started while a remote person was talking.
 - **Study:**
   - A waveform match (GCC-PHAT) is too weak. The mic DSP (Intel Smart Sound) gates the signal to digital zero and processes it non-linearly, and a linear echo model gave a delay that jumped between 0 and 350 ms.

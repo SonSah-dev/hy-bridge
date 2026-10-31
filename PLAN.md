@@ -1,6 +1,6 @@
 # Plan (compressed: 3 days)
 
-**Deadline (provisional):** Wed 2026-10-28, Yerevan time. The brief allows one week from receipt and is dated 2026-10-21; the developer set 3 days remaining as of 2026-10-25 (see D-009). The exact cut-off time is still to be confirmed. **Target: submit by Wed 28 Oct 18:00.**
+**Deadline (provisional):** Wed 2026-10-28, Yerevan time. The brief allows one week from receipt and is dated 2026-10-21; the developer set 3 days remaining as of 2026-10-25 (see D-009). The exact cut-off time is still to be confirmed. **Target: submit by Wed 28 Oct 18:00.** *(Update 2026-10-31: work continued past this date; the actual cut-off is still to be confirmed by the developer.)*
 
 The challenge brief is the source of truth. Each step ends with a check that must pass before the next step starts.
 
@@ -14,7 +14,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 | Mon 26 | 5 | Walking skeleton, mic path: capture → VAD → ASR → MT → terminal, latency logged | 2.0 | Live `Me` lines; latency logged per segment | done 2026-10-27: playback and live runs pass; live accuracy fixes (D-016, D-017, D-018) |
 | Tue 27 | 6 | Add loopback source, single inference worker, configuration (D-010/D-011) | 1.5 | Both sources print; settings come from config | done 2026-10-28: playback, live loopback and live call pass (D-019) |
 | Tue 27 | 7 | Speaker clustering + test call: 2 remote speakers on separate devices, taking turns | 2.5 | TESTS.md §Speakers | code done; test call 2026-10-29: latency and S4 pass, labels fixed by replay (D-020); second call for S1–S3, S5 pending |
-| Tue 27 | 8 | Latency hardening during a live call | 1.0 | p95 within target | — |
+| Tue 27 | 8 | Latency hardening during a live call | 1.0 | p95 within target | done 2026-10-31 for latency: live p95 2.48 s (29 Oct call) and 2.06 s (31 Oct call), none over 5 s; slow-CPU replays fixed by the 6 s cut and the 600M fallback (D-031), not yet live. Quality work in this step: D-021 to D-030 |
 | Wed 28 | 9 | Full rehearsal on the interview setup | 1.0 | TESTS.md checklist passes | — |
 | Wed 28 | 10 | README, limitations, final chat export into `chats/`, push | 1.5 | Deliverables complete | — |
 
@@ -22,7 +22,7 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 
 **Cut or deferred because of the deadline (D-009):**
 - ~~BuzzASR/OpenVINO experiment~~: run anyway on 2026-10-27 and rejected; less accurate and too slow (D-014).
-- NLLB 1.3B: only if 600M's quality fails and latency allows.
+- ~~NLLB 1.3B: only if 600M's quality fails and latency allows~~: adopted on 2026-10-31 (FLEURS chrF 64.6 vs 60.8, D-028). The 600M stays loaded as the deadline fallback (D-031).
 - Chat converter: built during Step 10 at the latest.
 
 **Backlog (noted 2026-10-27, to come back to):**
@@ -37,6 +37,8 @@ The challenge brief is the source of truth. Each step ends with a check that mus
 - **Invented translations of garbled ASR** (D-017, D-019) — **done 2026-10-29 (D-022), catches the worst cases only:** unclear speech gives non-words that NLLB turns into fluent, wrong English. Idea: a confidence check (ASR score or share of unknown words) that shows the Armenian with `[unclear]` instead of a translation.
 
 - **MT repetition guard** (D-020) — **done 2026-10-29 (D-023), as a detector, not a decoding change:** compare `no_repeat_ngram_size` 3/4 with off on the 15 eval clips only (a full 134-text sweep takes ~20 min on this CPU). The output-length cap already bounds the loop at ≈ 3.7 s. Step 8.
+- **Echo with laptop speakers** (31 Oct call, D-030): detector in shadow mode, logs only. Needs a call with speakers and deliberate quiet interruptions before any line is hidden.
+- **Second test call** (D-020, D-030, D-031): S1–S3 and the 10-minute S5 on new audio; echo pass criterion; first live check of the 6 s cut and the fallback. Can double as the Step 9 rehearsal.
 - **Speaker change inside a phrase** (D-020): a handover with < 1 s pause merges two voices into one segment. Only if the live call shows it often.
 
 **Working rules:** small verified commits; change one thing at a time; stop and rethink after 3 failed attempts; no silent fallbacks.

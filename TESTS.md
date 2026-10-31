@@ -2,12 +2,12 @@
 
 ## Mandatory (from the brief)
 - [x] Microphone and system audio are captured at the same time; the user chooses the devices *(Step 1, 2026-10-26)*
-- [ ] Armenian speech is recognised and printed as Armenian text
-- [ ] Each segment is translated into understandable English *(mic clips: 11/15 understandable, Step 4; live check in Step 9)*
-- [ ] Microphone speech is always labelled `Me`; remote speakers get stable `Speaker 1`, `Speaker 2`, … labels for the whole session
-- [ ] Each terminal line shows time, speaker, Armenian and English
-- [ ] **≤ 5 s from the end of a spoken phrase to the English line.** Measured from the last voiced audio frame to the print timestamp, logged for every segment.
-- [ ] Everything runs locally; no cloud speech or translation APIs
+- [x] Armenian speech is recognised and printed as Armenian text *(Step 3: CER 8.2% on own clips; FLEURS D-024; every live run since Step 5)*
+- [ ] Each segment is translated into understandable English *(mic clips with the 600M: 11/15 understandable, Step 4. NLLB-1.3B is now the default: FLEURS chrF 64.6 vs 60.8, D-028. Garbled speech shows `[unclear]`, D-022. Not yet rated on a live call: Step 9)*
+- [ ] Microphone speech is always labelled `Me`; remote speakers get stable `Speaker 1`, `Speaker 2`, … labels for the whole session *(`Me` part met: S4 passed on the 29 Oct call. Stable remote labels shown only on a replay of the call they were tuned on, D-020; S1–S3 and S5 need a second call. With speakers instead of headphones, call audio can print as `Me`, D-030)*
+- [x] Each terminal line shows time, speaker, Armenian and English *(`[time] Label: Armenian  →  English`, every run since Step 5; unit test `test_worker_logs_and_prints`)*
+- [x] **≤ 5 s from the end of a spoken phrase to the English line.** Measured from the last voiced audio frame to the print timestamp, logged for every segment. *(Live: 29 Oct call p95 2.48 s, max 2.73 s; 31 Oct call p95 2.06 s, max 2.10 s; none over 5 s. Replays on a slow-CPU day went over 5 s on 8 s monologue cuts. With the 6 s cut and the 600M fallback: max 3.93 s, D-031. Not yet live with D-031)*
+- [x] Everything runs locally; no cloud speech or translation APIs *(all inference on the CPU: Silero VAD, FastConformer, NLLB via CTranslate2, WeSpeaker. Network use is only the one-time model download from Hugging Face/GitHub)*
 
 ## Provisional internal targets (to be revised after the baseline measurements)
 | Area | Target |
@@ -91,8 +91,8 @@ Two remote Armenian speakers on separate devices, plus the developer on the mic.
 - [ ] **S5 no label explosion:** no more than one spurious extra speaker label in 10 minutes.
 
 ## Configuration
-- [ ] Every D-010 setting can be overridden from the command line or a config file, and the README documents each one.
-- [ ] Devices can be selected by index and by name substring.
+- [x] Every D-010 setting can be overridden from the command line or a config file, and the README documents each one. *(`--config`/`--set` for every key, unknown keys rejected, unit tests in `tests/test_config.py`; README table covers every key, checked 2026-10-31)*
+- [x] Devices can be selected by index and by name substring. *(name: Step 1 #6; index and name: unit tests `test_parse_device` and `tests/test_audio.py`)*
 
 ## Step 6 — system audio added (D-019)
 Exit check: both sources print; settings come from config.
