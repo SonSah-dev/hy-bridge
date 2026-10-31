@@ -65,9 +65,8 @@ Armenian → English uses NLLB-200 distilled **1.3B** (**CC-BY-NC-4.0, non-comme
 
 ```powershell
 python -c "from huggingface_hub import snapshot_download; snapshot_download('OpenNMT/nllb-200-distilled-1.3B-ct2-int8', local_dir='models/nllb-1.3b-ct2-int8')"
-copy models
-llb-600m-ct2-int8\sentencepiece.bpe.model models
-llb-1.3b-ct2-int8\n```
+copy models\nllb-600m-ct2-int8\sentencepiece.bpe.model models\nllb-1.3b-ct2-int8\
+```
 
 `--set mt.size=600m` goes back to the 600M model. The permissive alternative `Helsinki-NLP/opus-mt-hy-en` (Apache-2.0) was measured and is clearly weaker. Models are converted once from the official repos into `models/`. Conversion needs `torch` and `transformers`; running the models does not. The commands are in [eval/bench_mt.py](eval/bench_mt.py).
 
