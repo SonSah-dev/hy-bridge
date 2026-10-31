@@ -12,7 +12,7 @@ from pathlib import Path
 
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 SOURCES = {"opus": "Helsinki-NLP/opus-mt-hy-en", "nllb": "facebook/nllb-200-distilled-600M"}
-DIRS = {"opus": "opus-mt-hy-en-ct2-{q}", "nllb": "nllb-600m-ct2-{q}"}
+DIRS = {"opus": "opus-mt-hy-en-ct2-{q}", "nllb": "nllb-{size}-ct2-{q}"}   # size: "600m" or "1.3b" (D-028)
 NLLB_SRC, NLLB_TGT = "hye_Armn", "eng_Latn"
 # Output length cap: 2 x input tokens + 10. Real translations stayed within 2 x (134 logged texts);
 # a garbled segment made NLLB loop ("well, well, ...") to 242 tokens and 13.8 s (D-020).
@@ -43,24 +43,25 @@ def is_degenerate(source: str, output: str, min_run: int = 3, margin: int = 2) -
     return run >= min_run and run >= repeat_run(source) + margin
 
 
-def model_dir(family: str, compute: str) -> Path:
-    return MODELS_DIR / DIRS[family].format(q=compute)
+def model_dir(family: str, compute: str, size: str = "600m") -> Path:
+    return MODELS_DIR / DIRS[family].format(q=compute, size=size)
 
 
 class Translator:
     """`family` is "opus" or "nllb"; `compute` is "int8" or "float32" (the converted weights)."""
 
     def __init__(self, family: str, compute: str = "int8", threads: int = 2, beam_size: int = 4,
-                 path: str | Path | None = None):
+                 path: str | Path | None = None, no_repeat_ngram: int = 0, size: str = "600m"):
         import ctranslate2
         import sentencepiece as spm
 
         if family not in SOURCES:
             raise ValueError(f"family must be one of {sorted(SOURCES)}, got {family!r}")
-        path = Path(path) if path else model_dir(family, compute)
+        path = Path(path) if path else model_dir(family, compute, size)
         if not (path / "model.bin").exists():
             raise FileNotFoundError(f"no CTranslate2 model in {path}; see eval/bench_mt.py --help")
         self.family, self.compute, self.threads, self.beam_size = family, compute, threads, beam_size
+        self.no_repeat_ngram = no_repeat_ngram   # 0 = off; stops loops while decoding (D-028)
         self._tr = ctranslate2.Translator(str(path), device="cpu", compute_type=compute,
                                           intra_threads=threads, inter_threads=1)
         if family == "nllb":
@@ -78,10 +79,12 @@ class Translator:
         limit = min(256, MAX_OUT_RATIO * len(pieces) + MAX_OUT_EXTRA)
         if self.family == "nllb":
             out = self._tr.translate_batch([[NLLB_SRC] + pieces + ["</s>"]], target_prefix=[[NLLB_TGT]],
-                                           beam_size=beam, max_decoding_length=limit)
+                                           beam_size=beam, max_decoding_length=limit,
+                                           no_repeat_ngram_size=self.no_repeat_ngram)
             tokens = [t for t in out[0].hypotheses[0] if t != NLLB_TGT]
         else:
-            out = self._tr.translate_batch([pieces + ["</s>"]], beam_size=beam, max_decoding_length=limit)
+            out = self._tr.translate_batch([pieces + ["</s>"]], beam_size=beam, max_decoding_length=limit,
+                                           no_repeat_ngram_size=self.no_repeat_ngram)
             tokens = out[0].hypotheses[0]
         return self._tgt.decode(tokens).strip()
 

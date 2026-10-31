@@ -50,6 +50,8 @@ class AsrConfig:
 class MtConfig:
     family: str = "nllb"                   # "nllb" (CC-BY-NC) or "opus" (Apache-2.0, weaker) (D-015)
     compute: str = "int8"                  # converted weights: "int8" or "float32"
+    size: str = "1.3b"                     # NLLB size: "1.3b" (FLEURS chrF 64.6) or "600m" (60.8) (D-028)
+    no_repeat_ngram: int = 4               # never repeat a 4-gram while decoding (stops loops); 0 = off
     beam_size: int = 2
     short_beam_size: int = 4               # for 1-3 word segments not in the phrasebook (D-017)
     threads: int = 4
@@ -64,7 +66,7 @@ class TextConfig:
     numbers_to_digits: bool = True         # spelled-out numbers >= 10 become digits before MT
     phrasebook: str = "phrasebook.tsv"     # short replies translated directly; "" = off (D-017)
     names: str = "names.tsv"               # names -> Latin letters before MT; "" = off (D-021)
-    gazetteer: str = "gazetteer.tsv"       # Wikidata places/people/given names; "" = off (D-026)
+    gazetteer: str = ""                    # "gazetteer.tsv" = Wikidata names; off: no gain with 1.3B (D-028)
     min_letters: int = 2                   # segments with fewer Armenian letters are not shown
 
 

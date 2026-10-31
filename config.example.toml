@@ -35,6 +35,8 @@ unclear_low_share = 0.15      # or at least this share of tokens with probabilit
 [mt]
 family = "nllb"               # "nllb" (CC-BY-NC, non-commercial) or "opus" (Apache-2.0, weaker) (D-015)
 compute = "int8"              # "int8" or "float32" (must be converted into models/)
+size = "1.3b"                 # "1.3b" (better, ~0.3 s slower end to end) or "600m" (D-028)
+no_repeat_ngram = 4           # never repeat a 4-word sequence while translating: stops loops (D-028)
 beam_size = 2
 short_beam_size = 4           # 1-3 word segments not found in the phrasebook (D-017)
 threads = 4
@@ -48,7 +50,7 @@ glossary = "glossary.tsv"     # Armenian-letter spellings of terms, fixed before
 numbers_to_digits = true      # spelled-out numbers >= 10 become digits before translation
 phrasebook = "phrasebook.tsv" # short replies translated directly, not by NLLB; "" = off
 names = "names.tsv"           # people and places -> Latin letters before translation; "" = off
-gazetteer = "gazetteer.tsv"   # places in Armenia, notable people, given names (Wikidata); "" = off
+gazetteer = ""                # "gazetteer.tsv" = Wikidata places/people/names; off: no gain with 1.3B (D-028)
 min_letters = 2               # segments with fewer Armenian letters (noise, "«.") are not shown
 
 [speakers]

@@ -113,10 +113,16 @@ def fixers() -> dict:
     return {k: TextFixer(g if use_g else None, True, n if use_n else None) for k, (use_g, use_n) in VARIANTS.items()}
 
 
-def stage_mt(limit: int | None, reference: bool = False) -> None:
-    from armtranslate.mt import SegmentTranslator, Translator
+def mt_cache(reference: bool, mt: str | None, no_repeat: int = 0) -> Path:
+    base = MTREF_CACHE if reference else MT_CACHE
+    tag = (f"-{mt}" if mt else "") + (f"-nr{no_repeat}" if no_repeat else "")
+    return base.with_name(base.stem + f"{tag}.jsonl") if tag else base
+
+
+def stage_mt(limit: int | None, reference: bool = False, mt: str | None = None, no_repeat: int = 0) -> None:
+    from armtranslate.mt import MODELS_DIR, SegmentTranslator, Translator
     from armtranslate.phrasebook import Phrasebook
-    cache_path = MTREF_CACHE if reference else MT_CACHE
+    cache_path = mt_cache(reference, mt, no_repeat)
     cache = {r["src"]: r for r in read_jsonl(cache_path)}
     fx = fixers()
     rows = read_jsonl(ASR_CACHE)[:limit]
@@ -126,13 +132,15 @@ def stage_mt(limit: int | None, reference: bool = False) -> None:
         srcs = list(dict.fromkeys(fx[v](r["asr"]) for r in rows for v in VARIANTS))
     todo = [s for s in srcs if s not in cache]
     print(f"{len(srcs)} distinct texts, {len(todo)} to translate", flush=True)
-    st = SegmentTranslator(Translator("nllb", "int8", threads=4, beam_size=2),
+    st = SegmentTranslator(Translator("nllb", "int8", threads=4, beam_size=2,
+                                      path=(MODELS_DIR / mt) if mt else None, no_repeat_ngram=no_repeat),
                            Phrasebook(ROOT / "phrasebook.tsv"), 4)
     with open(cache_path, "a", encoding="utf-8", newline="\n") as f:
         for i, s in enumerate(todo, 1):
             t = time.perf_counter()
             en = st(s)
-            f.write(json.dumps({"src": s, "en": en, "mt_s": round(time.perf_counter() - t, 3)},
+            f.write(json.dumps({"src": s, "en": en, "mt_s": round(time.perf_counter() - t, 3),
+                                "pieces": len(st.translator._src.encode(s, out_type=str))},
                                ensure_ascii=False) + "\n")
             if i % 50 == 0:
                 f.flush()
@@ -168,12 +176,21 @@ def report(mean_below: float, low_from: float) -> dict:
                        "bleu": round(sacrebleu.corpus_bleu(hyps, [[r["en"] for r in with_en]]).score, 2),
                        "texts_changed_vs_none": sum(fx[v](r["asr"]) != fx["none"](r["asr"]) for r in rows)}
     out["variants"] = variants
-    ref_mt = {r["src"]: r["en"] for r in read_jsonl(MTREF_CACHE)}
-    hyps = [ref_mt.get(fx["all"](r["hy"])) for r in with_en]
-    if all(h is not None for h in hyps):      # MT ceiling: same pipeline, no recognition errors
-        out["mt_from_reference"] = {
+    out["mt_from_reference"] = {}             # MT ceiling: same pipeline, no recognition errors
+    out["mt_from_asr_by_model"] = {}
+    for path in sorted(OUT.glob("fleurs-mt*.jsonl")):
+        ref_side = path.stem.startswith("fleurs-mtref")
+        model = path.stem.removeprefix("fleurs-mtref" if ref_side else "fleurs-mt").lstrip("-") or "nllb-600m-ct2-int8"
+        cache = {r["src"]: r for r in read_jsonl(path)}
+        hyps = [cache.get(fx["all"](r["hy" if ref_side else "asr"]), {}).get("en") for r in with_en]
+        if any(h is None for h in hyps):
+            continue
+        times = [cache[fx["all"](r["hy" if ref_side else "asr"])]["mt_s"] for r in with_en]
+        (out["mt_from_reference"] if ref_side else out["mt_from_asr_by_model"])[model] = {
             "chrf": round(sacrebleu.corpus_chrf(hyps, [[r["en"] for r in with_en]]).score, 2),
-            "bleu": round(sacrebleu.corpus_bleu(hyps, [[r["en"] for r in with_en]]).score, 2)}
+            "bleu": round(sacrebleu.corpus_bleu(hyps, [[r["en"] for r in with_en]]).score, 2),
+            "mt_s_median": round(float(np.median(times)), 3), "mt_s_p95": round(float(np.percentile(times, 95)), 3),
+            "mt_s_max": round(max(times), 3)}
     changed = []
     for r in with_en:
         a, b = fx["none"](r["asr"]), fx["all"](r["asr"])
@@ -207,13 +224,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("stage", choices=["asr", "mt", "mtref", "report"])
     ap.add_argument("--limit", type=int, help="first N clips only")
+    ap.add_argument("--mt", help="MT model folder under models/ (default: the live NLLB-600M int8)")
+    ap.add_argument("--no-repeat", type=int, default=0, help="no_repeat_ngram_size while decoding (0 = off)")
     ap.add_argument("--unclear", type=float, nargs=2, default=[-0.3, 0.15], metavar=("MEAN", "LOW_SHARE"))
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if args.stage == "asr":
         stage_asr(args.limit)
     elif args.stage in ("mt", "mtref"):
-        stage_mt(args.limit, reference=args.stage == "mtref")
+        stage_mt(args.limit, reference=args.stage == "mtref", mt=args.mt, no_repeat=args.no_repeat)
     else:
         out = report(*args.unclear)
         (OUT / "fleurs-summary.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")

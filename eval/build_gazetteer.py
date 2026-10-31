@@ -1,6 +1,7 @@
 """Build gazetteer.tsv from Wikidata (CC0): Armenian name -> English spelling (D-026).
 
     python eval/build_gazetteer.py            # about 700 API calls, a few minutes
+    python eval/build_gazetteer.py --reclean  # re-apply the label cleaning to gazetteer.tsv only
 
 Uses the Wikidata Action API (search with `haswbstatement`, then `wbgetentities` for labels),
 because the SPARQL service was rate-limited during the build. Sets:
@@ -74,15 +75,41 @@ def labels(ids: list[str]) -> dict[str, tuple[str, str]]:
     return out
 
 
+_ADMIN_HY = re.compile(r"(մարզ|համայնք|շրջան)")
+_ADMIN_EN = re.compile(r"\s+(Municipality|Province|Community|District|Rural Community)$", re.IGNORECASE)
+
+
 def clean(hy: str, en: str) -> tuple[str, str] | None:
     hy = re.sub(r"\s*\(.*?\)", "", hy).split(",")[0].strip()
     en = re.sub(r"\s*\(.*?\)", "", en).split(",")[0].strip()
+    if not _ADMIN_HY.search(hy):          # `Գյումրի` is the town: not "Gyumri Municipality"
+        en = _ADMIN_EN.sub("", en)
     if not _HY.match(hy) or not _EN.match(en):
         return None
     return hy, en
 
 
+def reclean() -> int:
+    lines, changed = [], 0
+    for line in OUT.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#") or not line.strip():
+            lines.append(line)
+            continue
+        hy, en, kind = line.split("\t")
+        c = clean(hy, en)
+        if c is None:
+            changed += 1
+            continue
+        changed += c[1] != en
+        lines.append(f"{c[0]}\t{c[1]}\t{kind}")
+    OUT.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"recleaned {OUT.name}: {changed} entries changed or dropped")
+    return 0
+
+
 def main() -> int:
+    if "--reclean" in sys.argv[1:]:
+        return reclean()
     pairs: dict[str, dict[str, Counter]] = {k: defaultdict(Counter) for k in (*SETS, "surname")}
     for kind, queries in SETS.items():
         ids = sorted({i for q in queries for i in search_ids(q)})
