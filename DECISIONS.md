@@ -598,3 +598,13 @@ Published model claims are labelled *reported* until they have been reproduced h
   - Note: the 600M timings in this run (median 1.98 s) were measured on the slow day, so they are not comparable with the 1.3B's 1.56 s from D-028.
 - **Not addressed:** the speaker embedding time on long system segments (1.8 s once) and the 1 s end pause still count against the 5 s budget. If the CPU is much slower than on this day, the 600M can miss too. For the interview: mains power, the Windows "Best performance" power mode, and no other heavy apps.
 - 255 unit tests pass (270 after merging with D-030).
+
+## D-032 `Բարեւ ձեզ` restored when the mic's noise gate cuts its start
+- **Date:** 2026-10-31 · **Status:** implemented; checked on all logged texts and FLEURS.
+- **Problem:** the developer's greeting `Բարեւ ձեզ` was recognised right in only **2 of 11** standalone attempts across the logged runs. It came out as `Հարեւ`, `Պարեւ`, `Տարեւ`, `Այարեւ`, `Հարարեւ`, `Այեւ`, `Հեց`, `Այ` before `ձեզ`. It was then shown as "Hello to you.", "Or to you.", "You too." or `[unclear]`. `ձեզ` itself was always right.
+- **Cause:** the recordings (`runs/20261031-225317`, `-225728`) are exact digital zero before every phrase. The level jumps from silence to about −33 dB within one 10 ms frame. The Intel Smart Sound noise gate (also seen in D-030) opens only once the voice is loud, so the quiet voiced start of `Բ` is never recorded.
+- **Tried, no consistent gain:** re-recognising the 11 recorded segments with the digital zeros filled with noise (−70 or −60 dBFS) or with 0.3 s more lead-in only moved the errors around (`Պարեւ` ↔ `Այարեւ` ↔ `Բարեւ`). The sound is not in the audio.
+- **Change (`textfix.fix_greeting`, first step of `TextFixer`):** the first word of a segment, when it is one of these clipped forms directly before `ձեզ`, becomes `Բարեւ`. The phrasebook then gives "Hello.", and an exact phrasebook match is trusted over the `[unclear]` test (D-022).
+- **Check:** of 406 distinct logged texts, exactly the 6 clipped greetings change, all to "Hello."; FLEURS ASR 0 of 932 change.
+- **Not fixed:** `Հեց ձեզ` and `Այ ձեզ` (too little left) and `Հակ/Հար բարեւ ձեզ` (a junk word before a correct greeting) stay as they are. The gate probably clips the start of other phrases too; this rule only covers the greeting. **Likely better fix, needs the developer:** switch off the microphone's audio enhancements (Windows Settings → System → Sound → the microphone → Audio enhancements: Off) and record a few greetings to compare.
+- 287 unit tests pass.

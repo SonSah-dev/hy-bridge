@@ -311,6 +311,16 @@ def units_after_numbers(text: str) -> str:
     return _DRAM_AFTER_NUMBER.sub(lambda m: f"{m.group(1)} AMD" + (f"-{m.group(2)}" if m.group(2) else ""), text)
 
 
+# The mic's noise gate (Intel Smart Sound) cuts the quiet voiced start of a phrase, so `Բարեւ ձեզ`
+# is heard as `Հարեւ`, `Պարեւ`, `Տարեւ`, `Այարեւ`, `Այեւ` ... `ձեզ` (9 of 11 logged greetings, D-032).
+# Only the first word of a segment, directly before ձեզ; apart from Արեւ (sun) none is a word.
+_GREETING = re.compile(rf"^(\W*)(?:[ՀՊՏՎ]ա|Այա|Հարա|Ա)?(?:րեւ|յեւ)(?=\s+ձեզ(?![{ARM}]))", re.IGNORECASE)
+
+
+def fix_greeting(text: str) -> str:
+    return _GREETING.sub(r"\1Բարեւ", text)
+
+
 _ALPHA = set(re.findall(rf"[{ARM}]", "".join(map(chr, range(0x0531, 0x0588)))))
 
 
@@ -409,6 +419,7 @@ class TextFixer:
         self.numbers = numbers
 
     def __call__(self, text: str) -> str:
+        text = fix_greeting(text)
         if self.entries:
             text = apply_glossary(text, self.entries)
         if self.names:

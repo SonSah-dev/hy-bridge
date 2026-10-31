@@ -213,3 +213,22 @@ def test_gazetteer_off():
 ])
 def test_dram_after_number_is_amd(asr, fixed):
     assert TextFixer(None)(asr) == fixed
+
+
+@pytest.mark.parametrize("asr", ["Հարեւ ձեզ։", "Պարեւ ձեզ։", "Տարեւ ձեզ։", "Վարեւ ձեզ։", "Այարեւ ձեզ։",
+                                 "Հարարեւ ձեզ։", "Այեւ ձեզ։", "պարեւ ձեզ", "Բարեւ ձեզ։"])
+def test_clipped_greeting_is_restored(asr):              # the mic's gate cuts the start of Բ (D-032)
+    from armtranslate.textfix import fix_greeting
+    assert fix_greeting(asr).lower().startswith("բարեւ ձեզ")
+
+
+def test_greeting_keeps_the_rest():
+    from armtranslate.textfix import fix_greeting
+    assert fix_greeting("Պարեւ ձեզ Սաթենիկ ջան։") == "Բարեւ ձեզ Սաթենիկ ջան։"
+
+
+@pytest.mark.parametrize("text", ["Ձեզ եւս։", "Թերեւս ձեզ համար։", "Երեւ ձեզ։", "Ես Պարեւ ձեզ ասացի։",
+                                  "Հարեւան ձեզ։", "Պարեւ ձեզանից։", "Պարեւ։"])
+def test_greeting_fix_leaves_other_text(text):
+    from armtranslate.textfix import fix_greeting
+    assert fix_greeting(text) == text
