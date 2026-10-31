@@ -202,3 +202,14 @@ def test_gazetteer_after_names_and_glossary(tmp_path, gaz):
 
 def test_gazetteer_off():
     assert Gazetteer(None)("Ես Դսեղից եմ") == "Ես Դսեղից եմ"
+
+
+@pytest.mark.parametrize("asr, fixed", [                 # NLLB: դրամ -> "drachmas"; AMD stays (D-029)
+    ("Սուրճն արժե 500 դրամ։", "Սուրճն արժե 500 AMD։"),
+    ("Մեկ դոլարն արժե երեք հարյուր իննսուն դրամ։", "Մեկ դոլարն արժե 390 AMD։"),
+    ("Գնեցի 2000 դրամով։", "Գնեցի 2000 AMD-ով։"),
+    ("Դրամ չունեմ։", "Դրամ չունեմ։"),                     # "money": no number, left alone
+    ("500 դրամատուն", "500 դրամատուն"),                   # another word
+])
+def test_dram_after_number_is_amd(asr, fixed):
+    assert TextFixer(None)(asr) == fixed
