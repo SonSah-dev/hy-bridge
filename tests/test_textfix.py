@@ -232,3 +232,22 @@ def test_greeting_keeps_the_rest():
 def test_greeting_fix_leaves_other_text(text):
     from armtranslate.textfix import fix_greeting
     assert fix_greeting(text) == text
+
+
+@pytest.mark.parametrize("asr", ["Հեւ ձեզ։", "Հեք ձեզ։", "Հեց ձեզ։", "Հովհեւ ծեզ։", "Պարեւ ծեզ։"])
+def test_more_clipped_greetings_are_restored(asr):   # live 2026-11-01 (D-032)
+    from armtranslate.textfix import fix_greeting
+    assert fix_greeting(asr) == "Բարեւ ձեզ։"
+
+
+@pytest.mark.parametrize("text", ["Նաեւ ձեզ։", "Հեւ։", "Հեւալով ձեզ մոտ եկա։", "Հեքիաթ ձեզ համար։"])
+def test_real_phrases_near_greeting_stay(text):
+    from armtranslate.textfix import fix_greeting
+    assert fix_greeting(text) == text
+
+
+@pytest.mark.parametrize("text, noise", [("Հովհ։", True), ("Հովհ.", True), ("«Հովհ է։", True), ("Հովհ ծ։", True),
+                                         ("Հովհաննես։", False), ("Հովհ, ինչպես ես։", False)])
+def test_bare_hovh_is_noise(text, noise):
+    from armtranslate.textfix import is_noise
+    assert is_noise(text) == noise

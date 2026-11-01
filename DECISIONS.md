@@ -607,4 +607,10 @@ Published model claims are labelled *reported* until they have been reproduced h
 - **Change (`textfix.fix_greeting`, first step of `TextFixer`):** the first word of a segment, when it is one of these clipped forms directly before `ձեզ`, becomes `Բարեւ`. The phrasebook then gives "Hello.", and an exact phrasebook match is trusted over the `[unclear]` test (D-022).
 - **Check:** of 406 distinct logged texts, exactly the 6 clipped greetings change, all to "Hello."; FLEURS ASR 0 of 932 change.
 - **Not fixed:** `Հեց ձեզ` and `Այ ձեզ` (too little left) and `Հակ/Հար բարեւ ձեզ` (a junk word before a correct greeting) stay as they are. The gate probably clips the start of other phrases too; this rule only covers the greeting. **Likely better fix, needs the developer:** switch off the microphone's audio enhancements (Windows Settings → System → Sound → the microphone → Audio enhancements: Off) and record a few greetings to compare.
-- 287 unit tests pass.
+- **Update 2026-11-01, after live tests on main:**
+  - **Nothing in the code made recognition worse.** The last two mic recordings (`runs/20261101-000319`, `-001023`) were replayed on the code from before D-030/D-031 (`0b02ccb`) and on main, and gave the same Armenian. Three of the four live tests that night ran before main was pulled, so without this rule (`Այարեւ ձեզ` → "You too.").
+  - **Recognition of the clipped greeting depends on a few milliseconds.** The same audio gave `Հեւ ձեզ` live and `Բարեւ ձեզ` on replay, where the segment started 30 ms earlier.
+  - **More clipped forms** seen live: `Հեւ`, `Հեք`, `Հեց`, `Հովհեւ` before `ձեզ`/`ծեզ` ("Hey to you.", `[unclear]`). They are now restored too. `Նաեւ ձեզ` (to you too) and `Ձեզ եւս` stay.
+  - **Bare `Հովհ` hidden:** a segment that is only `Հովհ` (optionally with `է` or `ծ`) is a short non-speech sound (D-030) and is not shown. It had been shown as "How can we do this?", "John: What is it?", "John is.".
+  - **Check:** of 411 distinct logged texts, 11 greetings change (all to "Hello.") and 3 `Հովհ` lines are hidden; FLEURS (ASR and reference) 0 changes.
+- 303 unit tests pass.

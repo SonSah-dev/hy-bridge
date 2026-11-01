@@ -25,7 +25,7 @@ import numpy as np
 from .audio import AudioFrame, wall_time
 from .echo import EchoDetector
 from .evalset import read_wav
-from .textfix import _ALPHA
+from .textfix import _ALPHA, is_noise
 from .vad import Segment
 
 UNCLEAR = "[unclear]"
@@ -176,7 +176,7 @@ class Worker:
         hy, conf = (out if isinstance(out, tuple) else (out, None))
         hy = hy.strip()
         asr_s = time.perf_counter() - t
-        if sum(ch in _ALPHA for ch in hy) < self.min_letters:
+        if sum(ch in _ALPHA for ch in hy) < self.min_letters or is_noise(hy):   # `Հովհ`: D-032
             self.skipped += 1
             return None
         label, speaker, spk_s = LABELS.get(seg.source, seg.source), None, 0.0

@@ -179,3 +179,10 @@ def test_no_deadline_calls_mt_without_budget():
     w = Worker(lambda s: "Բարեւ", lambda s: "EN", out=io.StringIO())
     seg = Segment("mic", t_start=92.0, t_last_voice=100.0, t_emit=100.0, samples=np.zeros(16_000, np.float32))
     assert not w.process(seg).mt_fallback
+
+
+def test_bare_hovh_is_not_shown():                    # non-speech written as `Հովհ` (D-032)
+    out = io.StringIO()
+    w = Worker(lambda s: "Հովհ։", lambda s: "How can we do this?", out=out)
+    seg = Segment("mic", t_start=92.0, t_last_voice=100.0, t_emit=100.0, samples=np.zeros(16_000, np.float32))
+    assert w.process(seg) is None and w.skipped == 1 and out.getvalue() == ""
