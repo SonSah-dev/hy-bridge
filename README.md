@@ -2,9 +2,41 @@
 
 Python command-line tool that captures microphone and system audio on Windows, transcribes Armenian speech, translates it into English, and labels speakers (`Me`, `Speaker 1`, `Speaker 2`, …). All models run locally.
 
-**Status:** in development. See PLAN.md, DECISIONS.md and TESTS.md.
+**Status (2026-11-01):** all parts of the brief are implemented and have run live on this laptop: two test calls with two remote people, plus mic tests. Latency is well inside 5 s live (p95 2.06–2.48 s on the calls). Still open: a second call to check stable speaker labels on new audio, and the full rehearsal on the interview setup (TESTS.md, PLAN.md Steps 9–10). Every design choice and measurement is in [DECISIONS.md](DECISIONS.md) (D-001 to D-033).
 
-Setup, model rationale, architecture and limitations will be documented here as each part is verified.
+## Quick start (Windows, Python 3.12, CPU only)
+
+```powershell
+python -m venv .venv; .venv\Scripts\activate
+pip install -r requirements.txt
+python eval/bench_asr.py --download          # speech recognition model -> models/
+python eval/bench_speakers.py --download     # speaker model -> models/
+# Silero VAD: save silero_vad.onnx from https://github.com/snakers4/silero-vad into models/silero-vad/
+# Translation: convert NLLB-600M once (needs torch + transformers, see eval/bench_mt.py),
+# then download the ready-made 1.3B and copy the 600M tokenizer next to it (Translation, below).
+python translate.py --list                   # pick the mic and the device the call plays through
+python translate.py                          # Ctrl+C to stop; lines also go to runs/<timestamp>/
+```
+
+Before an interview: wear **headphones**, keep the laptop **on mains power** with sleep off, and add the expected names and terms to `names.tsv` and `glossary.tsv` (see below).
+
+## How it works
+
+```
+mic (WASAPI) ─────────┐                                       ┌─> "[time] Me: Armenian  →  English"
+                      ├─> Silero VAD ─> segments ─> one worker ─┤
+call (WASAPI loopback)┘   (1 s pause or 6 s cut)    │          └─> runs/<ts>/segments.jsonl, summary.json
+                                                    ├─ FastConformer ASR (Armenian text + confidence)
+                                                    ├─ speaker embedding (call audio only) -> Speaker 1, 2, …
+                                                    ├─ text fixes: greeting, misheard words, glossary, names, numbers, times, AMD
+                                                    ├─ [unclear] if recognition is unsure
+                                                    └─ phrasebook or NLLB-1.3B (600M if the 5 s deadline is at risk)
+```
+
+- **Capture (D-011):** standard Windows audio only, so it works with any call app. Both streams are resampled to 16 kHz mono.
+- **Segmentation (D-016, D-031):** a phrase ends after 1 s of silence. Long speech is cut at 6 s, at the quietest point, so monologues stay within the 5 s budget.
+- **One inference worker:** phrases are processed one at a time, in the order they end, so lines never interleave out of order.
+- **Latency** is measured per line from the last voiced audio to the printed line and saved for every run.
 
 ## Audio capture and configuration
 
@@ -139,3 +171,16 @@ Needed in `models/` (see Steps 3–4 for the ASR and MT models): `silero-vad/sil
 **Phrasebook:** short replies (1–3 words) are looked up in [phrasebook.tsv](phrasebook.tsv) before translation, because the translation model often invents sentences for very short inputs. A greeting followed by a name keeps the name in Latin letters (`Ողջույն Սոնա ջան` → "Hello, Sona."). Add the short replies you expect.
 
 **Power:** keep the laptop plugged in, and turn off sleep and Modern Standby for the session: one translation took 49 s instead of about 1 s while Windows entered standby (D-024). On battery, speech recognition and translation ran about twice as slowly (D-017).
+
+## Limitations
+
+What is known not to work, or not yet checked. Each point links to the decision with the measurements.
+
+- **Speakers instead of headphones:** the microphone also hears the call, and that echo prints as `Me` lines, sometimes as invented English. The echo detector only logs (`echo_suspect`) and hides nothing; it caught 3 of 5 echoes in one test call (D-030). **Use headphones.**
+- **Start of short phrases clipped by the laptop mic:** the Intel Smart Sound noise gate cuts the quiet start of a phrase. `Բարեւ ձեզ` came out right only 2 times in 11 before the text fixes, and whether it does depends on milliseconds. Text rules restore the forms seen so far (D-032, D-033). Switching off the microphone's *Audio enhancements* in Windows is likely the better fix, but hasn't been tried yet.
+- **Speaker labels:** stable labels for two remote people were shown only on a replay of the call they were tuned on (26 of 28 right). A check on a second call is pending. A person's first short reply often shows as `Speaker ?`. If the next person starts within about 1 s, both voices land in one line under one label (D-020).
+- **Translation quality:** NLLB is good on everyday interview speech, but weak on rare, technical or poetic words even when the Armenian is right (`սաղարթախիտ` → "frozen"). Garbled speech is shown as `[unclear]` rather than invented English, but only the worst cases are caught (D-022, D-033). FLEURS chrF 64.6 (D-028).
+- **Recognition errors:** English terms come out in Armenian letters, and names get distorted. The glossary and names list fix only the spellings added to them (D-016, D-021). A word misheard as another real word (`հիմա 7:44` → `ես հենց 44`) can't be fixed afterwards.
+- **CPU speed:** on a day the CPU ran about 1.8× slower, long phrases risked going over 5 s. The 6 s cut and the 600M fallback keep this case within 5 s (max 3.93 s on replay), but this hasn't been confirmed live yet (D-031). On battery, or when Windows enters standby, everything is much slower (D-017, D-024).
+- **Licence:** the NLLB translation models are CC-BY-NC-4.0, so the default setup is for non-commercial use only (see Licences).
+- **Platform:** Windows only (WASAPI loopback); tested on one laptop (Core Ultra 5 125H, Intel Smart Sound mic, Realtek speakers).
