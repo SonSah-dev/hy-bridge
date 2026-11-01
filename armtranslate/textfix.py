@@ -300,6 +300,11 @@ def times_to_digits(text: str) -> str:
 # The ASR writes the spoken abbreviation "կգ" as `կոգ` (two mic tests, D-026); only after a number.
 _UNIT_AFTER_NUMBER = re.compile(rf"(\d)\s+կոգ(?![{ARM}])", re.IGNORECASE)
 
+# Something that weighs is measured in grams: the ASR heard գրամ as `դրամ` in every weighing test
+# (`Սուրճը կշռում է 400 դրամ`, D-029, D-033). After a form of կշռել and a number, դրամ -> գրամ.
+_GRAM_AFTER_WEIGH = re.compile(rf"(կշռ[{ARM}]*\s+(?:(?:էին|է|են)\s+)?\d[\d\s,.]*?)\s+դրամ(?=(?:{'|'.join(SUFFIXES)})?(?![{ARM}]))",
+                               re.IGNORECASE)
+
 
 # NLLB translates the Armenian currency դրամ as "drachma(s)" ("Coffee costs 500 drachmas") but keeps
 # "AMD" ("costs 500 AMD"). Only directly after a number: on its own դրամ also means "money" (D-029).
@@ -308,19 +313,36 @@ _DRAM_AFTER_NUMBER = re.compile(rf"(\d)\s+դրամ({'|'.join(SUFFIXES)})?(?![{AR
 
 def units_after_numbers(text: str) -> str:
     text = _UNIT_AFTER_NUMBER.sub(r"\1 կգ", text)
+    text = _GRAM_AFTER_WEIGH.sub(r"\1 գրամ", text)
     return _DRAM_AFTER_NUMBER.sub(lambda m: f"{m.group(1)} AMD" + (f"-{m.group(2)}" if m.group(2) else ""), text)
 
 
 # The mic's noise gate (Intel Smart Sound) cuts the quiet voiced start of a phrase, so `Բարեւ ձեզ`
-# is heard as `Հարեւ`, `Պարեւ`, `Տարեւ`, `Այարեւ`, `Այեւ`, `Հեւ`, `Հեք`, `Հովհեւ` ... `ձեզ`/`ծեզ`
+# is heard as `Հարեւ`, `Պարեւ`, `Տարեւ`, `Այարեւ`, `արարեւ`, `Այեւ`, `Հեւ`, `Հեք`, `Հովհեւ` ... `ձեզ`/`ծեզ`
 # (D-032). Only the first word of a segment, directly before ձեզ; apart from Արեւ (sun) none is a
 # word. `Նաեւ ձեզ` (to you too) and `Ձեզ եւս` are real phrases and stay.
-_GREETING = re.compile(rf"^(\W*)(?:(?:[ՀՊՏՎ]ա|Այա|Հարա|Ա)?(?:րեւ|յեւ)|Հե[ւքց]|Հովհեւ)\s+[ձծ]եզ(?![{ARM}])",
+_GREETING = re.compile(rf"^(\W*)(?:(?:[ՀՊՏՎ]ա|Այա|Հ?արա|Ա)?(?:րեւ|յեւ)|Հե[ւքց]|Հովհեւ)\s+[ձծ]եզ(?![{ARM}])",
                        re.IGNORECASE)
 
 
 def fix_greeting(text: str) -> str:
     return _GREETING.sub(r"\1Բարեւ ձեզ", text)
+
+
+# Ordinary words the ASR mishears the same way in live runs (D-033): Armenian -> Armenian, with an
+# ending kept attached (`միջինգը` -> `միթինգը`). None of the wrong forms is a word.
+MISHEARD = {"միջինգ": "միթինգ", "կշճում": "կշռում", "կշում": "կշռում"}
+_MISHEARD = re.compile(rf"(?<![{ARM}])({'|'.join(MISHEARD)})((?:{'|'.join(SUFFIXES)})?)(?![{ARM}])", re.IGNORECASE)
+
+# "How are you?" glued into one word: `Ինչպե՞սեք` was translated "What about you?" (D-033).
+_GLUED_QUESTION = re.compile(rf"(?<![{ARM}])(ինչպե՞?ս|ո՞?նց)(եք|ես)(?![{ARM}])", re.IGNORECASE)
+
+
+def fix_misheard(text: str) -> str:
+    def word(m: re.Match) -> str:
+        right = MISHEARD[m.group(1).lower()]
+        return (right[0].upper() + right[1:] if m.group(1)[0].isupper() else right) + m.group(2)
+    return _GLUED_QUESTION.sub(r"\1 \2", _MISHEARD.sub(word, text))
 
 
 # A short non-speech sound that the recognizer writes as `Հովհ` (with the call silent, and as call
@@ -431,7 +453,7 @@ class TextFixer:
         self.numbers = numbers
 
     def __call__(self, text: str) -> str:
-        text = fix_greeting(text)
+        text = fix_misheard(fix_greeting(text))
         if self.entries:
             text = apply_glossary(text, self.entries)
         if self.names:

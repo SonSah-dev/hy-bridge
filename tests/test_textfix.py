@@ -251,3 +251,33 @@ def test_real_phrases_near_greeting_stay(text):
 def test_bare_hovh_is_noise(text, noise):
     from armtranslate.textfix import is_noise
     assert is_noise(text) == noise
+
+
+def _fixer():
+    from armtranslate.textfix import TextFixer
+    return TextFixer(None, True)
+
+
+@pytest.mark.parametrize("asr, fixed", [
+    ("Ինչպե՞սեք։", "Ինչպե՞ս եք։"),                     # translated "What about you?" (D-033)
+    ("Ո՞նցես", "Ո՞նց ես"),
+    ("Ինչպես եք։", "Ինչպես եք։"),
+    ("Վաղը կայանալու է միջինգը։", "Վաղը կայանալու է միթինգը։"),
+    ("Միջինգը սկսվեց։", "Միթինգը սկսվեց։"),
+    ("Սուրճը կշճում է չորս հարյուր դրամ։", "Սուրճը կշռում է 400 գրամ։"),
+    ("Սուրճը կշում է 500 դրամ։", "Սուրճը կշռում է 500 գրամ։"),
+    ("Սուրճը կշռում է 300 դրամով։", "Սուրճը կշռում է 300 գրամով։"),
+    ("֊արարեւ ձեզ։", "֊Բարեւ ձեզ։"),
+])
+def test_misheard_words_fixed(asr, fixed):
+    assert _fixer()(asr) == fixed
+
+
+@pytest.mark.parametrize("text, fixed", [
+    ("Սուրճն արժե 500 դրամ։", "Սուրճն արժե 500 AMD։"),        # a price stays AMD (D-029)
+    ("Կշռեցի, 300 դրամ վճարեցի։", "Կշռեցի, 300 AMD վճարեցի։"),  # not directly after "weighs"
+    ("Մեկ տոննան կշռում է 100 կգ։", "Մեկ տոննան կշռում է 100 կգ։"),
+    ("Ոնցեր էին։", "Ոնցեր էին։"),
+])
+def test_other_text_unchanged(text, fixed):
+    assert _fixer()(text) == fixed

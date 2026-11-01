@@ -614,3 +614,19 @@ Published model claims are labelled *reported* until they have been reproduced h
   - **Bare `Հովհ` hidden:** a segment that is only `Հովհ` (optionally with `է` or `ծ`) is a short non-speech sound (D-030) and is not shown. It had been shown as "How can we do this?", "John: What is it?", "John is.".
   - **Check:** of 411 distinct logged texts, 11 greetings change (all to "Hello.") and 3 `Հովհ` lines are hidden; FLEURS (ASR and reference) 0 changes.
 - 303 unit tests pass.
+
+## D-033 Misheard words, glued "How are you?", grams after "weighs"
+- **Date:** 2026-11-01 · **Status:** implemented; checked on all logged texts and FLEURS.
+- **Found in the morning mic tests** (`runs/20261101-074323`, `-075003`). Latency was p95 1.75–2.04 s; no speech was lost (every voiced stretch of the recordings was checked); the `Հովհ` noise was hidden (D-032). Recognition errors that a text rule can fix, each translated from the corrected Armenian to check:
+  - `Ինչպե՞սեք` (glued) → "What about you?"; `Ինչպե՞ս եք` → "How are you?". Offline recognition of the same audio spaced it right, so the joining is not stable.
+  - `միջինգը` (for `միթինգը`) → "an intermission"; corrected → "a rally".
+  - `Սուրճը կշճում/կշում է 400 դրամ` → "Coffee is 400 AMD"; `կշռում է 400 գրամ` → "Coffee weighs 400 grams". The developer said գրամ in every weighing test and the ASR heard դրամ every time (5 logged texts, D-029).
+  - `֊արարեւ ձեզ` → `[unclear]` (another clipped greeting, D-032).
+- **Change (`textfix.fix_misheard`, after `fix_greeting`; `_GRAM_AFTER_WEIGH` in `units_after_numbers`):**
+  - `MISHEARD`: `միջինգ` → `միթինգ`, `կշճում`/`կշում` → `կշռում`, exact words with an Armenian ending kept attached. The glossary is not used for these, because it writes Latin terms with a hyphen before the ending (`Python-ը`).
+  - `ինչպե՞ս`/`ո՞նց` glued to `եք`/`ես` is split.
+  - After a form of `կշռել` and a number (optionally with `է`, `են`, `էին` between), `դրամ` becomes `գրամ`, keeping the ending. A price stays `AMD` (`Սուրճն արժե 500 դրամ`), and so does a number after other words (`Կշռեցի, 300 դրամ վճարեցի`).
+  - The greeting rule also covers `արարեւ ձեզ`.
+- **Check:** of 424 distinct logged texts, 8 change and every translation improves (4 weighings "AMD" → "grams", the greeting, "How are you?", "a rally"); FLEURS ASR and reference 0 changes.
+- **Not fixable by rules, seen in the same tests:** NLLB on rare or poetic words with correct Armenian (`Անտառը սաղարթախիտ է` → "The forest is frozen."; `Շուտով ձմեռը կփռի ձյունաճերմակ փեշերը` → "…break the snow-covered snowflakes"); whole words misheard (`հիմա 7:44 է` → `ես հենց 44 եմ` → "I'm exactly 44 years old."). The `MISHEARD` list only grows from repeated live errors, so it will not cover new words in the interview.
+- 316 unit tests pass.
