@@ -312,13 +312,25 @@ def units_after_numbers(text: str) -> str:
 
 
 # The mic's noise gate (Intel Smart Sound) cuts the quiet voiced start of a phrase, so `Բարեւ ձեզ`
-# is heard as `Հարեւ`, `Պարեւ`, `Տարեւ`, `Այարեւ`, `Այեւ` ... `ձեզ` (9 of 11 logged greetings, D-032).
-# Only the first word of a segment, directly before ձեզ; apart from Արեւ (sun) none is a word.
-_GREETING = re.compile(rf"^(\W*)(?:[ՀՊՏՎ]ա|Այա|Հարա|Ա)?(?:րեւ|յեւ)(?=\s+ձեզ(?![{ARM}]))", re.IGNORECASE)
+# is heard as `Հարեւ`, `Պարեւ`, `Տարեւ`, `Այարեւ`, `Այեւ`, `Հեւ`, `Հեք`, `Հովհեւ` ... `ձեզ`/`ծեզ`
+# (D-032). Only the first word of a segment, directly before ձեզ; apart from Արեւ (sun) none is a
+# word. `Նաեւ ձեզ` (to you too) and `Ձեզ եւս` are real phrases and stay.
+_GREETING = re.compile(rf"^(\W*)(?:(?:[ՀՊՏՎ]ա|Այա|Հարա|Ա)?(?:րեւ|յեւ)|Հե[ւքց]|Հովհեւ)\s+[ձծ]եզ(?![{ARM}])",
+                       re.IGNORECASE)
 
 
 def fix_greeting(text: str) -> str:
-    return _GREETING.sub(r"\1Բարեւ", text)
+    return _GREETING.sub(r"\1Բարեւ ձեզ", text)
+
+
+# A short non-speech sound that the recognizer writes as `Հովհ` (with the call silent, and as call
+# echo, D-030), shown as invented English ("How can we do this?", "John: What is it?"). As a whole
+# segment it is noise and is not shown (D-032).
+_NOISE = re.compile(r"\W*Հովհ(?:\s+[էծ])?\W*", re.IGNORECASE)
+
+
+def is_noise(text: str) -> bool:
+    return _NOISE.fullmatch(text) is not None
 
 
 _ALPHA = set(re.findall(rf"[{ARM}]", "".join(map(chr, range(0x0531, 0x0588)))))
